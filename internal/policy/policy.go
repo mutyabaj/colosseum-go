@@ -84,6 +84,12 @@ func EvaluateTool(toolName string, input json.RawMessage, allowed []string) Deci
 	return Decision{Allow: true}
 }
 
+// trustedLocalPorts lists localhost ports that host internal services and
+// should be callable by agents without an operator approval gate.
+var trustedLocalPorts = map[string]bool{
+	"3001": true, // Zernio social-media bridge
+}
+
 func evaluateURLTarget(rawURL, approvalReason string) Decision {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || u.Scheme == "" {
@@ -101,6 +107,9 @@ func evaluateURLTarget(rawURL, approvalReason string) Decision {
 		return Decision{Allow: false, Reason: "blocked metadata service host"}
 	}
 	if isLocalOrPrivateHost(host) {
+		if trustedLocalPorts[u.Port()] {
+			return Decision{Allow: true}
+		}
 		return Decision{Allow: true, RequireApproval: true, Reason: approvalReason}
 	}
 	return Decision{}
