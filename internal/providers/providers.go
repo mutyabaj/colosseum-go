@@ -116,11 +116,14 @@ func (c *AnthropicClient) Complete(ctx context.Context, req CompletionRequest) (
 		messages = append(messages, map[string]any{"role": m.Role, "content": m.Content})
 	}
 	tools := make([]map[string]any, 0, len(req.Tools))
+	anthropicToInternalToolName := map[string]string{}
 	for _, t := range req.Tools {
 		var schema map[string]any
 		_ = json.Unmarshal(t.InputSchema, &schema)
+		sanitizedName := sanitizeToolNameForOpenAI(t.Name)
+		anthropicToInternalToolName[sanitizedName] = t.Name
 		tools = append(tools, map[string]any{
-			"name":         t.Name,
+			"name":         sanitizedName,
 			"description":  t.Description,
 			"input_schema": schema,
 		})
@@ -179,7 +182,11 @@ func (c *AnthropicClient) Complete(ctx context.Context, req CompletionRequest) (
 			if len(args) == 0 {
 				args = json.RawMessage(`{}`)
 			}
-			out.ToolCalls = append(out.ToolCalls, ToolCall{ID: c.ID, Name: c.Name, Arguments: args})
+			internalName := c.Name
+			if mapped, ok := anthropicToInternalToolName[c.Name]; ok {
+				internalName = mapped
+			}
+			out.ToolCalls = append(out.ToolCalls, ToolCall{ID: c.ID, Name: internalName, Arguments: args})
 		}
 	}
 	out.Text = strings.TrimSpace(strings.Join(texts, "\n"))
