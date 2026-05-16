@@ -77,16 +77,24 @@ func (c *AnthropicClient) Complete(ctx context.Context, req CompletionRequest) (
 		c.HTTPClient = &http.Client{Timeout: 90 * time.Second}
 	}
 	messages := make([]map[string]any, 0, len(req.Messages))
-	for _, m := range req.Messages {
+	for i := 0; i < len(req.Messages); i++ {
+		m := req.Messages[i]
 		if m.Role == "tool" {
-			messages = append(messages, map[string]any{
-				"role": "user",
-				"content": []map[string]any{{
+			// Batch all consecutive tool results into a single user message
+			toolResults := []map[string]any{{
+				"type":        "tool_result",
+				"tool_use_id": m.ToolCallID,
+				"content":     m.Content,
+			}}
+			for i+1 < len(req.Messages) && req.Messages[i+1].Role == "tool" {
+				i++
+				toolResults = append(toolResults, map[string]any{
 					"type":        "tool_result",
-					"tool_use_id": m.ToolCallID,
-					"content":     m.Content,
-				}},
-			})
+					"tool_use_id": req.Messages[i].ToolCallID,
+					"content":     req.Messages[i].Content,
+				})
+			}
+			messages = append(messages, map[string]any{"role": "user", "content": toolResults})
 			continue
 		}
 		if len(m.ContentParts) > 0 {
@@ -111,6 +119,28 @@ func (c *AnthropicClient) Complete(ctx context.Context, req CompletionRequest) (
 			} else {
 				messages = append(messages, map[string]any{"role": m.Role, "content": blocks})
 			}
+			continue
+		}
+		// Assistant messages with tool calls need tool_use content blocks
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			blocks := []map[string]any{}
+			if strings.TrimSpace(m.Content) != "" {
+				blocks = append(blocks, map[string]any{"type": "text", "text": m.Content})
+			}
+			for _, tc := range m.ToolCalls {
+				sanitizedName := sanitizeToolNameForOpenAI(tc.Name)
+				var input any
+				if err := json.Unmarshal(tc.Arguments, &input); err != nil {
+					input = map[string]any{}
+				}
+				blocks = append(blocks, map[string]any{
+					"type":  "tool_use",
+					"id":    tc.ID,
+					"name":  sanitizedName,
+					"input": input,
+				})
+			}
+			messages = append(messages, map[string]any{"role": "assistant", "content": blocks})
 			continue
 		}
 		messages = append(messages, map[string]any{"role": m.Role, "content": m.Content})
