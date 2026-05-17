@@ -163,19 +163,20 @@ func validateProvenanceOutputContract(output string, media mediaEvidence) (bool,
 	return true, "provenance media contract passed"
 }
 
+var (
+	imageClaimPattern = regexp.MustCompile(`(?i)\b(screenshot|captured image|image attached|photo attached|image below|screenshot below|attached image|attached photo)\b`)
+	videoClaimPattern = regexp.MustCompile(`(?i)\b(video attached|attached video|video below|recorded video)\b`)
+	audioClaimPattern = regexp.MustCompile(`(?i)\b(audio attached|attached audio|audio below|recorded audio)\b`)
+	deliveryPattern   = regexp.MustCompile(`(?i)\b(attached|attachment|included below|here is the (screenshot|image|photo|video|audio)|here's the (screenshot|image|photo|video|audio))\b`)
+)
+
 func parseMediaClaim(normalizedOutput string) mediaClaim {
-	claim := mediaClaim{
-		MentionsImage: strings.Contains(normalizedOutput, "screenshot") || strings.Contains(normalizedOutput, "image") || strings.Contains(normalizedOutput, "photo"),
-		MentionsVideo: strings.Contains(normalizedOutput, "video"),
-		MentionsAudio: strings.Contains(normalizedOutput, "audio"),
+	return mediaClaim{
+		MentionsImage:  imageClaimPattern.MatchString(normalizedOutput),
+		MentionsVideo:  videoClaimPattern.MatchString(normalizedOutput),
+		MentionsAudio:  audioClaimPattern.MatchString(normalizedOutput),
+		ClaimsDelivery: deliveryPattern.MatchString(normalizedOutput),
 	}
-	for _, marker := range []string{"attached", "attachment", "included", "here's", "here is", "below"} {
-		if strings.Contains(normalizedOutput, marker) {
-			claim.ClaimsDelivery = true
-			break
-		}
-	}
-	return claim
 }
 
 func hasArtifactContentLink(output string) bool {
