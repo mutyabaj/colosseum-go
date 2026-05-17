@@ -148,8 +148,11 @@ func apiAuthMiddleware(apiAuthToken string) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			var token string
 			authz := strings.TrimSpace(r.Header.Get("Authorization"))
-			token := strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
+			if strings.HasPrefix(authz, "Bearer ") {
+				token = strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
+			}
 			if token == "" {
 				token = strings.TrimSpace(r.Header.Get("X-API-Token"))
 			}
