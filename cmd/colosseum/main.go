@@ -139,7 +139,7 @@ func runServer(args []string) {
 	defer runtimeCancel()
 	go runtimeMgr.Start(runtimeCtx)
 
-	srv := api.NewServer(database, cfg.WorkspaceRoot, availableProviders, cfg.OpenAIKey, cfg.AnthropicKey, cfg.SecretKey, cfg.APIAuthToken, providerMap)
+	srv := api.NewServer(database, cfg.WorkspaceRoot, availableProviders, cfg.OpenAIKey, cfg.AnthropicKey, cfg.SecretKey, cfg.APIAuthToken, providerMap, cfg.BasicAuthUser, cfg.BasicAuthPass)
 	httpServer := &http.Server{
 		Addr:              cfg.BindAddr,
 		Handler:           srv.Handler(),

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"io/fs"
@@ -32,6 +33,8 @@ func NewServer(
 	secretKey string,
 	apiAuthToken string,
 	providerMap map[string]providers.Client,
+	basicAuthUser string,
+	basicAuthPass string,
 ) *Server {
 	s := &Server{DB: db, WorkspaceRoot: workspaceRoot, Providers: providers, ProviderMap: providerMap}
 	r := chi.NewRouter()
@@ -40,6 +43,9 @@ func NewServer(
 	r.Use(middleware.Recoverer)
 	r.Use(requestLogger())
 	r.Use(timeoutExceptStream(120 * time.Second))
+	if strings.TrimSpace(basicAuthUser) != "" && strings.TrimSpace(basicAuthPass) != "" {
+		r.Use(basicAuthMiddleware(basicAuthUser, basicAuthPass))
+	}
 	if strings.TrimSpace(apiAuthToken) != "" {
 		r.Use(apiAuthMiddleware(apiAuthToken))
 	}
@@ -117,6 +123,20 @@ func timeoutExceptStream(d time.Duration) func(http.Handler) http.Handler {
 				return
 			}
 			wrapped.ServeHTTP(w, r)
+		})
+	}
+}
+
+func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u, p, ok := r.BasicAuth()
+			if !ok || subtle.ConstantTimeCompare([]byte(u), []byte(user)) != 1 || subtle.ConstantTimeCompare([]byte(p), []byte(pass)) != 1 {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Colosseum"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

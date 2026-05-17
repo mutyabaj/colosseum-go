@@ -22,6 +22,8 @@ type Config struct {
 	AnthropicKey    string
 	APIAuthToken    string
 	SecretKey       string
+	BasicAuthUser   string
+	BasicAuthPass   string
 	DefaultModel    string
 	BrowserMode     string
 	BrowserImage    string
@@ -46,6 +48,8 @@ func Load(args []string) (Config, error) {
 		AnthropicKey:    os.Getenv("ANTHROPIC_API_KEY"),
 		APIAuthToken:    os.Getenv("COLOSSEUM_API_AUTH_TOKEN"),
 		SecretKey:       os.Getenv("COLOSSEUM_SECRET_KEY"),
+		BasicAuthUser:   os.Getenv("COLOSSEUM_BASIC_AUTH_USER"),
+		BasicAuthPass:   os.Getenv("COLOSSEUM_BASIC_AUTH_PASS"),
 		DefaultModel:    getenv("COLOSSEUM_DEFAULT_MODEL", "gpt-4.1-mini"),
 		BrowserMode:     getenv("COLOSSEUM_BROWSER_MODE", "docker"),
 		BrowserImage:    getenv("COLOSSEUM_BROWSER_IMAGE", "mcr.microsoft.com/playwright:v1.59.1-jammy"),
