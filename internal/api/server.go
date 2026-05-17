@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
@@ -127,6 +128,8 @@ func timeoutExceptStream(d time.Duration) func(http.Handler) http.Handler {
 	}
 }
 
+type basicAuthPassedKey struct{}
+
 func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +139,7 @@ func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), basicAuthPassedKey{}, true)))
 		})
 	}
 }
@@ -145,6 +148,10 @@ func apiAuthMiddleware(apiAuthToken string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !strings.HasPrefix(r.URL.Path, "/api/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if r.Context().Value(basicAuthPassedKey{}) == true {
 				next.ServeHTTP(w, r)
 				return
 			}
