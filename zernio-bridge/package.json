@@ -10,6 +10,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.68",
     "@zernio/node": "^0.2.148",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",

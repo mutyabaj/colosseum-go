@@ -1,4 +1,5 @@
 import Zernio from '@zernio/node';
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
 import express from 'express';
 import multer from 'multer';
 import fs from 'fs';
@@ -63,6 +64,84 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Generate a branded image card and upload it to Zernio; returns mediaId
+app.post('/generate-card', async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text is required' });
+  try {
+    const W = 1080, H = 1080;
+    const BG = '#1B4332';
+    const ACCENT = '#52B788';
+
+    const canvas = createCanvas(W, H);
+    const ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, W, H);
+
+    // Top banner
+    ctx.fillStyle = ACCENT;
+    ctx.fillRect(0, 0, W, 115);
+
+    // Org name on banner
+    ctx.fillStyle = BG;
+    ctx.font = 'bold 36px sans-serif';
+    ctx.fillText('Minnesota EquiVoice Partnership', 40, 68);
+
+    // Content text
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '30px sans-serif';
+    const lines = wrapText(ctx, text, W - 120);
+    let y = 155;
+    for (const line of lines.slice(0, 18)) {
+      if (y > H - 120) break;
+      ctx.fillText(line, 60, y);
+      y += 46;
+    }
+
+    // Bottom banner
+    ctx.fillStyle = ACCENT;
+    ctx.fillRect(0, H - 90, W, 90);
+    ctx.fillStyle = BG;
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText('mnequivoicepartnership.org', 40, H - 50);
+
+    const buffer = canvas.toBuffer('image/png');
+
+    const { data: up } = await zernio.media.getUploadUrl({
+      body: { fileName: 'equivoice_card.png', mimeType: 'image/png' },
+    });
+    await fetch(up.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: buffer,
+    });
+    res.json({ ok: true, mediaId: up.mediaId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function wrapText(ctx, text, maxWidth) {
+  const lines = [];
+  for (const paragraph of text.split('\n')) {
+    const words = paragraph.split(' ');
+    let line = '';
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
 
 // Post with media (image or video)
 app.post('/post-with-media', async (req, res) => {
