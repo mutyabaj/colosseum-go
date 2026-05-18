@@ -1,5 +1,5 @@
 import Zernio from '@zernio/node';
-import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
+import { createCanvas } from '@napi-rs/canvas';
 import express from 'express';
 import multer from 'multer';
 import fs from 'fs';
@@ -44,31 +44,55 @@ app.post('/post', async (req, res) => {
   }
 });
 
-// Upload media file, returns mediaId for use in /post-with-media
+// Upload media file, returns publicUrl for use in /post-with-media
 app.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file is required' });
   try {
-    const { data: upload } = await zernio.media.getUploadUrl({
-      body: { fileName: req.file.originalname, mimeType: req.file.mimetype },
+    const { data: up } = await zernio.media.getMediaPresignedUrl({
+      body: { filename: req.file.originalname, contentType: req.file.mimetype },
     });
     const fileBuffer = fs.readFileSync(req.file.path);
-    await fetch(upload.uploadUrl, {
+    await fetch(up.uploadUrl, {
       method: 'PUT',
       headers: { 'Content-Type': req.file.mimetype },
       body: fileBuffer,
     });
-    fs.unlinkSync(req.file.path);
-    res.json({ ok: true, mediaId: upload.mediaId });
+    try { fs.unlinkSync(req.file.path); } catch {}
+    res.json({ ok: true, publicUrl: up.publicUrl });
   } catch (err) {
-    fs.unlinkSync(req.file.path);
+    try { fs.unlinkSync(req.file.path); } catch {}
     res.status(500).json({ error: err.message });
   }
 });
 
-// Generate a branded image card and upload it to Zernio; returns mediaId
+// Post with media URLs (image or video)
+app.post('/post-with-media', async (req, res) => {
+  const { content, platforms, mediaUrls, scheduledFor } = req.body;
+  if (!content || !platforms?.length || !mediaUrls?.length) {
+    return res.status(400).json({ error: 'content, platforms, and mediaUrls are required' });
+  }
+  try {
+    const { data } = await zernio.posts.createPost({
+      body: {
+        content,
+        platforms: platforms.map(p => ({ platform: p.platform, accountId: p.accountId })),
+        mediaItems: mediaUrls.map(url => ({ type: 'image', url })),
+        ...(scheduledFor ? { scheduledFor } : { publishNow: true }),
+      },
+    });
+    res.json({ ok: true, post: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generate a branded 1080x1080 image card and post to platforms in one call.
+// Body: { cardText: "text for image (no hashtags)", content: "full caption with hashtags", platforms: [...] }
 app.post('/generate-card', async (req, res) => {
-  const { text } = req.body;
-  if (!text) return res.status(400).json({ error: 'text is required' });
+  const { cardText, content, platforms } = req.body;
+  if (!cardText || !content || !platforms?.length) {
+    return res.status(400).json({ error: 'cardText, content, and platforms are required' });
+  }
   try {
     const W = 1080, H = 1080;
     const BG = '#1B4332';
@@ -77,23 +101,19 @@ app.post('/generate-card', async (req, res) => {
     const canvas = createCanvas(W, H);
     const ctx = canvas.getContext('2d');
 
-    // Background
     ctx.fillStyle = BG;
     ctx.fillRect(0, 0, W, H);
 
-    // Top banner
     ctx.fillStyle = ACCENT;
     ctx.fillRect(0, 0, W, 115);
 
-    // Org name on banner
     ctx.fillStyle = BG;
     ctx.font = 'bold 36px sans-serif';
     ctx.fillText('Minnesota EquiVoice Partnership', 40, 68);
 
-    // Content text
     ctx.fillStyle = '#FFFFFF';
     ctx.font = '30px sans-serif';
-    const lines = wrapText(ctx, text, W - 120);
+    const lines = wrapText(ctx, cardText, W - 120);
     let y = 155;
     for (const line of lines.slice(0, 18)) {
       if (y > H - 120) break;
@@ -101,7 +121,6 @@ app.post('/generate-card', async (req, res) => {
       y += 46;
     }
 
-    // Bottom banner
     ctx.fillStyle = ACCENT;
     ctx.fillRect(0, H - 90, W, 90);
     ctx.fillStyle = BG;
@@ -110,15 +129,24 @@ app.post('/generate-card', async (req, res) => {
 
     const buffer = canvas.toBuffer('image/png');
 
-    const { data: up } = await zernio.media.getUploadUrl({
-      body: { fileName: 'equivoice_card.png', mimeType: 'image/png' },
+    const { data: up } = await zernio.media.getMediaPresignedUrl({
+      body: { filename: 'equivoice_card.png', contentType: 'image/png' },
     });
     await fetch(up.uploadUrl, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: buffer,
     });
-    res.json({ ok: true, mediaId: up.mediaId });
+
+    const { data: post } = await zernio.posts.createPost({
+      body: {
+        content,
+        platforms: platforms.map(p => ({ platform: p.platform, accountId: p.accountId })),
+        mediaItems: [{ type: 'image', url: up.publicUrl }],
+        publishNow: true,
+      },
+    });
+    res.json({ ok: true, post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -142,27 +170,6 @@ function wrapText(ctx, text, maxWidth) {
   }
   return lines;
 }
-
-// Post with media (image or video)
-app.post('/post-with-media', async (req, res) => {
-  const { content, platforms, mediaIds, scheduledFor } = req.body;
-  if (!content || !platforms?.length || !mediaIds?.length) {
-    return res.status(400).json({ error: 'content, platforms, and mediaIds are required' });
-  }
-  try {
-    const { data } = await zernio.posts.createPost({
-      body: {
-        content,
-        platforms: platforms.map(p => ({ platform: p.platform, accountId: p.accountId })),
-        mediaIds,
-        ...(scheduledFor ? { scheduledFor } : { publishNow: true }),
-      },
-    });
-    res.json({ ok: true, post: data });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => console.log(`Zernio bridge listening on 0.0.0.0:${PORT}`));
