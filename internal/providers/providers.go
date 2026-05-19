@@ -160,7 +160,7 @@ func (c *AnthropicClient) Complete(ctx context.Context, req CompletionRequest) (
 	}
 	payload := map[string]any{
 		"model":      req.Model,
-		"max_tokens": 4096,
+		"max_tokens": 16000,
 		"system":     req.System,
 		"messages":   messages,
 	}
