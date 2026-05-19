@@ -116,7 +116,7 @@ func runServer(args []string) {
 		availableProviders["deepseek"] = true
 	}
 	if cfg.NvidiaKey != "" {
-		providerMap["nvidia"] = &providers.OpenAIClient{APIKey: cfg.NvidiaKey, BaseURL: "https://integrate.api.nvidia.com/v1"}
+		providerMap["nvidia"] = &providers.OpenAIClient{APIKey: cfg.NvidiaKey, BaseURL: "https://integrate.api.nvidia.com"}
 		availableProviders["nvidia"] = true
 	}
 	dockerMgr, err := docker.NewManager(database, cfg.DockerImage)
