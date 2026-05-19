@@ -115,6 +115,10 @@ func runServer(args []string) {
 		providerMap["deepseek"] = &providers.OpenAIClient{APIKey: cfg.DeepSeekKey, BaseURL: "https://api.deepseek.com"}
 		availableProviders["deepseek"] = true
 	}
+	if cfg.NvidiaKey != "" {
+		providerMap["nvidia"] = &providers.OpenAIClient{APIKey: cfg.NvidiaKey, BaseURL: "https://integrate.api.nvidia.com/v1"}
+		availableProviders["nvidia"] = true
+	}
 	dockerMgr, err := docker.NewManager(database, cfg.DockerImage)
 	if err != nil {
 		logFatalf("docker init failed: %v", err)
