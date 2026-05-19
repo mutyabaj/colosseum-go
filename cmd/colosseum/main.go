@@ -111,6 +111,10 @@ func runServer(args []string) {
 		providerMap["openai"] = &providers.OpenAIClient{APIKey: cfg.OpenAIKey}
 		availableProviders["openai"] = true
 	}
+	if cfg.DeepSeekKey != "" {
+		providerMap["deepseek"] = &providers.OpenAIClient{APIKey: cfg.DeepSeekKey, BaseURL: "https://api.deepseek.com"}
+		availableProviders["deepseek"] = true
+	}
 	dockerMgr, err := docker.NewManager(database, cfg.DockerImage)
 	if err != nil {
 		logFatalf("docker init failed: %v", err)

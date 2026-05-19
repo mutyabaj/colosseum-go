@@ -20,6 +20,7 @@ type Config struct {
 	DockerImage     string
 	OpenAIKey       string
 	AnthropicKey    string
+	DeepSeekKey     string
 	APIAuthToken    string
 	SecretKey       string
 	BasicAuthUser   string
@@ -46,6 +47,7 @@ func Load(args []string) (Config, error) {
 		DockerImage:     getenv("COLOSSEUM_DOCKER_IMAGE", "python:3.12"),
 		OpenAIKey:       os.Getenv("OPENAI_API_KEY"),
 		AnthropicKey:    os.Getenv("ANTHROPIC_API_KEY"),
+		DeepSeekKey:     os.Getenv("DEEPSEEK_API_KEY"),
 		APIAuthToken:    os.Getenv("COLOSSEUM_API_AUTH_TOKEN"),
 		SecretKey:       os.Getenv("COLOSSEUM_SECRET_KEY"),
 		BasicAuthUser:   os.Getenv("COLOSSEUM_BASIC_AUTH_USER"),
@@ -155,7 +157,7 @@ Flags:
   -h, --help                 Show this help
 
 Environment:
-  OPENAI_API_KEY, ANTHROPIC_API_KEY
+  OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY
   COLOSSEUM_API_AUTH_TOKEN, COLOSSEUM_SECRET_KEY
   COLOSSEUM_BIND, COLOSSEUM_LISTEN_IP, COLOSSEUM_PORT
   COLOSSEUM_DB_PATH, COLOSSEUM_ARTIFACT_PATH, COLOSSEUM_WORKSPACE_ROOT
