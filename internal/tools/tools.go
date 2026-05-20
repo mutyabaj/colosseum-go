@@ -73,6 +73,7 @@ func Builtins() []Definition {
 		{Name: "file.stat", Description: "Get file metadata for a path in workspace", Schema: rawSchema(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`), Kind: "builtin", Enabled: true, IsBuiltin: true},
 		{Name: "file.list", Description: "List files and directories under a workspace path", Schema: rawSchema(`{"type":"object","properties":{"path":{"type":"string"},"recursive":{"type":"boolean"},"max_entries":{"type":"integer","minimum":1,"maximum":5000}}}`), Kind: "builtin", Enabled: true, IsBuiltin: true},
 		{Name: "path.glob", Description: "Find paths in workspace matching a glob pattern", Schema: rawSchema(`{"type":"object","properties":{"pattern":{"type":"string"}},"required":["pattern"]}`), Kind: "builtin", Enabled: true, IsBuiltin: true},
+		{Name: "file.publish", Description: "Register a workspace file as a downloadable artifact. Returns artifact_id and download_path.", Schema: rawSchema(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`), Kind: "builtin", Enabled: true, IsBuiltin: true},
 		{Name: "apply.patch", Description: "Apply unified diff patch text in workspace", Schema: rawSchema(`{"type":"object","properties":{"patch":{"type":"string"}},"required":["patch"]}`), Kind: "builtin", Enabled: true, IsBuiltin: true},
 		{Name: "web.fetch", Description: "Fetch HTTP(S) content from a URL", Schema: rawSchema(`{"type":"object","properties":{"url":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":60},"max_bytes":{"type":"integer","minimum":1024,"maximum":1048576}},"required":["url"]}`), Kind: "builtin", Enabled: true, IsBuiltin: true},
 		{Name: "json.parse", Description: "Parse JSON string and return normalized object", Schema: rawSchema(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}`), Kind: "builtin", Enabled: true, IsBuiltin: true},
@@ -130,6 +131,8 @@ func (e *Executor) Execute(ctx context.Context, runCtx Context, name string, inp
 		return e.fileList(runCtx, input)
 	case "path.glob":
 		return e.pathGlob(runCtx, input)
+	case "file.publish":
+		return e.filePublish(ctx, runCtx, input)
 	case "apply.patch":
 		return e.applyPatch(ctx, runCtx, input)
 	case "web.fetch":

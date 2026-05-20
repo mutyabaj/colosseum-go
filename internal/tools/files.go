@@ -229,6 +229,41 @@ func (e *Executor) fileList(runCtx Context, input json.RawMessage) (Result, erro
 	return Result{Output: map[string]any{"entries": entries, "count": len(entries)}}, nil
 }
 
+func (e *Executor) filePublish(ctx context.Context, runCtx Context, input json.RawMessage) (Result, error) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(input, &req); err != nil {
+		return Result{}, err
+	}
+	full, err := safePath(runCtx.Workspace, req.Path)
+	if err != nil {
+		return Result{}, err
+	}
+	info, err := os.Stat(full)
+	if err != nil {
+		return Result{}, fmt.Errorf("file not found: %s", req.Path)
+	}
+	if info.IsDir() {
+		return Result{}, fmt.Errorf("path is a directory, not a file")
+	}
+	mime := guessMIMEFromPath(full)
+	kind := guessArtifactKind(full)
+	if err := e.insertArtifactRecord(runCtx, kind, full, mime, info.Size()); err != nil {
+		return Result{}, err
+	}
+	var artifactID string
+	if e.DB != nil {
+		_ = e.DB.QueryRowContext(ctx, `SELECT id FROM artifacts WHERE run_id=? AND path=? ORDER BY created_at DESC LIMIT 1`, runCtx.RunID, full).Scan(&artifactID)
+	}
+	return Result{Output: map[string]any{
+		"ok":            true,
+		"artifact_id":   artifactID,
+		"path":          req.Path,
+		"download_path": "/api/runs/" + runCtx.RunID + "/artifacts/" + artifactID + "/content",
+	}}, nil
+}
+
 func (e *Executor) pathGlob(runCtx Context, input json.RawMessage) (Result, error) {
 	var req struct {
 		Pattern string `json:"pattern"`
