@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -324,17 +325,40 @@ func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (Com
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(buf))
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	resp, err := c.HTTPClient.Do(httpReq)
-	if err != nil {
-		return CompletionResponse{}, err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 300 {
-		return CompletionResponse{}, fmt.Errorf("openai status=%d body=%s", resp.StatusCode, string(body))
+	var body []byte
+	retryBackoff := 15 * time.Second
+	for attempt := 0; attempt < 5; attempt++ {
+		httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(buf))
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+		resp, err := c.HTTPClient.Do(httpReq)
+		if err != nil {
+			return CompletionResponse{}, err
+		}
+		body, _ = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == 429 {
+			if attempt == 4 {
+				return CompletionResponse{}, fmt.Errorf("openai status=%d body=%s", resp.StatusCode, string(body))
+			}
+			wait := retryBackoff
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				if secs, err2 := strconv.Atoi(ra); err2 == nil {
+					wait = time.Duration(secs) * time.Second
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return CompletionResponse{}, ctx.Err()
+			case <-time.After(wait):
+			}
+			retryBackoff *= 2
+			continue
+		}
+		if resp.StatusCode >= 300 {
+			return CompletionResponse{}, fmt.Errorf("openai status=%d body=%s", resp.StatusCode, string(body))
+		}
+		break
 	}
 	var parsed struct {
 		Choices []struct {
