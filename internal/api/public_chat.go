@@ -407,23 +407,29 @@ async function sendMessage(text) {
   const d = await r.json();
   const runId = d.run_id;
 
-  let reply = '';
+  let replied = false;
   const src = new EventSource('/api/public/stream/runs/' + runId + '?public_token=' + encodeURIComponent(TOKEN));
   src.addEventListener('run_event', e => {
     try {
       const ev = JSON.parse(e.data);
       const p = ev.payload || {};
-      if (ev.event_type === 'text_delta' && p.delta) {
+      const et = ev.event_type || '';
+      // Show text as soon as the model responds
+      if (et === 'model.response' && p.text) {
         if (thinking.parentNode) thinking.remove();
-        if (!reply) addBubble('assistant', '');
-        const last = $('messages').querySelector('.bubble.assistant:last-child');
-        reply += p.delta;
-        if (last) { last.textContent = reply; $('messages').scrollTop = $('messages').scrollHeight; }
+        if (!replied) { addBubble('assistant', p.text); replied = true; }
+        else {
+          const last = $('messages').querySelector('.bubble.assistant:last-child');
+          if (last) { last.textContent = p.text; $('messages').scrollTop = $('messages').scrollHeight; }
+        }
       }
-      if (ev.event_type === 'run_finished' || ev.event_type === 'run_failed') {
+      if (et === 'run.completed' || et === 'run.failed') {
         src.close();
         if (thinking.parentNode) thinking.remove();
-        if (!reply) addBubble('assistant', p.error || 'Something went wrong. Please try again.');
+        if (!replied) {
+          const text = p.result || p.error || 'Something went wrong. Please try again.';
+          addBubble(et === 'run.completed' ? 'assistant' : 'thinking', text);
+        }
         busy = false;
         $('send-btn').disabled = false;
       }
@@ -432,7 +438,7 @@ async function sendMessage(text) {
   src.onerror = () => {
     src.close();
     if (thinking.parentNode) thinking.remove();
-    if (!reply) addBubble('assistant', 'Connection error. Please try again.');
+    if (!replied) addBubble('assistant', 'Connection error. Please try again.');
     busy = false;
     $('send-btn').disabled = false;
   };
