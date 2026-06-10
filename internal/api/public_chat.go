@@ -338,7 +338,10 @@ func buildPublicChatPage(agentID, name, desc, startersJSON, token string) string
   #send-btn { background: #1a472a; color: #fff; border: none; border-radius: 22px;
               padding: 0 20px; font-size: 0.9rem; cursor: pointer; white-space: nowrap; }
   #send-btn:disabled { opacity: 0.5; cursor: default; }
-  .disclaimer { font-size: 0.72rem; color: #888; padding: 6px 20px 8px; text-align: center; line-height: 1.4; }
+  .courtesy { font-size: 0.78rem; color: #555; padding: 8px 20px 2px; text-align: center; line-height: 1.4; }
+  .courtesy a { color: #1a472a; text-decoration: none; }
+  .courtesy a:hover { text-decoration: underline; }
+  .disclaimer { font-size: 0.72rem; color: #888; padding: 2px 20px 8px; text-align: center; line-height: 1.4; }
 </style>
 </head>
 <body>
@@ -352,6 +355,7 @@ func buildPublicChatPage(agentID, name, desc, startersJSON, token string) string
   <textarea id="msg-input" placeholder="Type your question…" rows="1"></textarea>
   <button id="send-btn">Send</button>
 </div>
+<p class="courtesy">A free service provided by <strong>Minnesota EquiVoice Partnership</strong> · <a href="https://www.mnequivoicepartnership.org" target="_blank" rel="noopener">mnequivoicepartnership.org</a></p>
 <p class="disclaimer">This is a free tax estimation tool. Results are estimates only — not tax advice. Always verify with a certified VITA volunteer.</p>
 
 <script>
