@@ -60,21 +60,13 @@ func checkSSRF(rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("invalid url: %w", err)
 	}
+	// Only reject URLs where the host is a literal private/link-local IP address.
+	// Docker service hostnames (e.g. "tax-api") legitimately resolve to internal
+	// container IPs and are admin-configured — we don't block those.
+	// The primary threat is a URL like http://169.254.169.254/ typed directly.
 	host := u.Hostname()
-	if ip := net.ParseIP(host); ip != nil {
-		if isPrivateIP(ip) {
-			return fmt.Errorf("http_tool: requests to private/internal addresses are not allowed")
-		}
-		return nil
-	}
-	addrs, err := net.LookupHost(host)
-	if err != nil {
-		return fmt.Errorf("http_tool: could not resolve host %q: %w", host, err)
-	}
-	for _, addr := range addrs {
-		if ip := net.ParseIP(addr); ip != nil && isPrivateIP(ip) {
-			return fmt.Errorf("http_tool: host %q resolves to a private/internal address", host)
-		}
+	if ip := net.ParseIP(host); ip != nil && isPrivateIP(ip) {
+		return fmt.Errorf("http_tool: requests to private/internal IP addresses are not allowed")
 	}
 	return nil
 }
