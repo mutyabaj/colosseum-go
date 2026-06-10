@@ -133,7 +133,9 @@ func timeoutExceptStream(d time.Duration) func(http.Handler) http.Handler {
 type basicAuthPassedKey struct{}
 
 func isPublicPath(path string) bool {
-	return strings.HasPrefix(path, "/c/") || strings.HasPrefix(path, "/api/public/")
+	return strings.HasPrefix(path, "/c/") ||
+		strings.HasPrefix(path, "/api/public/") ||
+		path == "/sms/inbound"
 }
 
 func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {

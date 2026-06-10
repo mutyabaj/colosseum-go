@@ -165,6 +165,9 @@ func registerAPIRoutes(
 
 	// Public chat page — served outside /api, no auth required
 	r.Get("/c/{agentID}", publicChatPageHandler(db))
+
+	// Twilio SMS webhook — auth bypassed, validated by Twilio signature instead
+	r.Post("/sms/inbound", smsInboundHandler(db, workspaceRoot))
 }
 
 func enhancePromptHandler(providerMap map[string]providers.Client) http.HandlerFunc {
