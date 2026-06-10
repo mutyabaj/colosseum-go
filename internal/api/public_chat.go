@@ -231,7 +231,6 @@ func streamEventsForRun(w http.ResponseWriter, r *http.Request, db *sql.DB, runI
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	lastSeq := 0
 	ticker := time.NewTicker(1 * time.Second)

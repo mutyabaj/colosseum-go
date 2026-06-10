@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +18,66 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// shellQuote wraps s in single quotes and escapes any embedded single quotes,
+// equivalent to Python's shlex.quote. Prevents shell metacharacter injection
+// when substituting agent-supplied values into shell_command templates.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// privateIPNets are ranges that must never be the target of an http_tool request.
+// Blocks SSRF against internal services and the Azure Instance Metadata Service.
+var privateIPNets = func() []*net.IPNet {
+	ranges := []string{
+		"127.0.0.0/8",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"169.254.0.0/16", // link-local / Azure IMDS
+		"::1/128",
+		"fc00::/7",
+	}
+	nets := make([]*net.IPNet, 0, len(ranges))
+	for _, r := range ranges {
+		_, n, _ := net.ParseCIDR(r)
+		nets = append(nets, n)
+	}
+	return nets
+}()
+
+func isPrivateIP(ip net.IP) bool {
+	for _, n := range privateIPNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func checkSSRF(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid url: %w", err)
+	}
+	host := u.Hostname()
+	if ip := net.ParseIP(host); ip != nil {
+		if isPrivateIP(ip) {
+			return fmt.Errorf("http_tool: requests to private/internal addresses are not allowed")
+		}
+		return nil
+	}
+	addrs, err := net.LookupHost(host)
+	if err != nil {
+		return fmt.Errorf("http_tool: could not resolve host %q: %w", host, err)
+	}
+	for _, addr := range addrs {
+		if ip := net.ParseIP(addr); ip != nil && isPrivateIP(ip) {
+			return fmt.Errorf("http_tool: host %q resolves to a private/internal address", host)
+		}
+	}
+	return nil
+}
 
 type Definition struct {
 	ID          string          `json:"id,omitempty"`
@@ -284,9 +346,9 @@ func (e *Executor) customTool(ctx context.Context, runCtx Context, name string, 
 		rendered = re.ReplaceAllStringFunc(rendered, func(match string) string {
 			key := strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}")
 			if v, ok := args[key]; ok {
-				return fmt.Sprintf("%v", v)
+				return shellQuote(fmt.Sprintf("%v", v))
 			}
-			return ""
+			return "''"
 		})
 		return e.shellExec(ctx, runCtx, json.RawMessage(fmt.Sprintf(`{"command":%q,"timeout_seconds":%d}`, rendered, cfg.TimeoutSeconds)))
 
@@ -302,6 +364,9 @@ func (e *Executor) customTool(ctx context.Context, runCtx Context, name string, 
 		}
 		if cfg.URL == "" {
 			return Result{}, fmt.Errorf("http_tool missing url")
+		}
+		if err := checkSSRF(cfg.URL); err != nil {
+			return Result{}, err
 		}
 		if cfg.Method == "" {
 			cfg.Method = "POST"
