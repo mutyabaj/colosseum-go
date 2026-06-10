@@ -337,5 +337,131 @@ def mn_renters_rebate(req: MNRentersRebateRequest):
     )
 
 
+# ── Minnesota State Income Tax (Form M1) ──────────────────────────────────────
+
+MN_TAX_DISCLAIMER = (
+    "⚠️ ESTIMATE ONLY — This is not a filed MN return. "
+    "Amounts are approximate based on published MN Dept of Revenue tables for 2024. "
+    "Visit a free VITA site for an accurate M1 prepared by an IRS-certified volunteer: "
+    "irs.gov/vita — or revenue.state.mn.us for official instructions."
+)
+
+# 2024 MN income tax brackets: list of (upper_bound, marginal_rate)
+# Source: MN Dept of Revenue — revenue.state.mn.us
+_MN_BRACKETS = {
+    "single":                  [(30_070, .0535), (98_760,  .0680), (183_340, .0785), (float("inf"), .0985)],
+    "married_filing_jointly":  [(43_950, .0535), (174_400, .0680), (304_970, .0785), (float("inf"), .0985)],
+    "married_filing_separately":[(30_070,.0535), (98_760,  .0680), (183_340, .0785), (float("inf"), .0985)],
+    "head_of_household":       [(30_070, .0535), (141_580, .0680), (233_660, .0785), (float("inf"), .0985)],
+    "qualifying_widow":        [(43_950, .0535), (174_400, .0680), (304_970, .0785), (float("inf"), .0985)],
+}
+
+_MN_STANDARD_DEDUCTION = {
+    "single": 14_575,
+    "married_filing_jointly": 29_150,
+    "married_filing_separately": 14_575,
+    "head_of_household": 21_900,
+    "qualifying_widow": 29_150,
+}
+
+MN_PERSONAL_EXEMPTION   = 4_800   # per exemption, 2024
+MN_WFC_EITC_MULTIPLIER  = 0.37    # MN Working Family Credit = 37% of federal EITC
+
+
+class MNIncomeTaxRequest(BaseModel):
+    filing_status: str = Field(
+        description="single | married_filing_jointly | married_filing_separately | head_of_household | qualifying_widow"
+    )
+    wages: float = Field(default=0.0, description="W-2 wages and salaries")
+    self_employment_income: float = Field(default=0.0, description="Net self-employment / gig income")
+    other_income: float = Field(default=0.0, description="Unemployment, interest, pensions, and other taxable income")
+    mn_tax_withheld: float = Field(default=0.0, description="Minnesota state income tax withheld from paychecks")
+    qualifying_children: int = Field(default=0, description="Number of qualifying children under 17")
+    dependents_other: int = Field(default=0, description="Number of other dependents")
+    federal_eitc: float = Field(default=0.0, description="Federal EITC amount (from estimate_federal_tax result) — used to compute MN Working Family Credit")
+    age: int = Field(default=40, description="Age of primary filer")
+    spouse_age: int = Field(default=0)
+
+
+class MNIncomeTaxResponse(BaseModel):
+    mn_agi: float
+    mn_standard_deduction: float
+    mn_personal_exemptions_total: float
+    mn_taxable_income: float
+    mn_income_tax_before_credits: float
+    mn_working_family_credit: float
+    mn_tax_after_credits: float
+    mn_tax_withheld: float
+    estimated_refund_or_owed: float
+    effective_mn_rate_pct: float
+    summary: str
+    disclaimer: str
+
+
+def _apply_brackets(taxable: float, brackets: list) -> float:
+    tax, prev = 0.0, 0.0
+    for limit, rate in brackets:
+        if taxable <= prev:
+            break
+        tax += (min(taxable, limit) - prev) * rate
+        prev = limit
+    return tax
+
+
+@app.post("/mn_income_tax", response_model=MNIncomeTaxResponse)
+def mn_income_tax(req: MNIncomeTaxRequest):
+    status = req.filing_status.lower()
+    brackets   = _MN_BRACKETS.get(status, _MN_BRACKETS["single"])
+    std_ded    = _MN_STANDARD_DEDUCTION.get(status, _MN_STANDARD_DEDUCTION["single"])
+
+    # MN AGI starts from federal AGI (wages + SE + other)
+    # SE income is reduced by the self-employment tax deduction (approx 7.65%)
+    se_deduction = req.self_employment_income * 0.0765
+    mn_agi = max(0.0, req.wages + req.self_employment_income + req.other_income - se_deduction)
+
+    # MN personal exemptions: 1 filer + 1 spouse (if MFJ) + dependents
+    spouse = 1 if status == "married_filing_jointly" else 0
+    num_exemptions = 1 + spouse + req.qualifying_children + req.dependents_other
+    total_exemptions = MN_PERSONAL_EXEMPTION * num_exemptions
+
+    mn_taxable = max(0.0, mn_agi - std_ded - total_exemptions)
+    mn_tax_gross = _apply_brackets(mn_taxable, brackets)
+
+    # Minnesota Working Family Credit (state EITC analogue)
+    wfc = req.federal_eitc * MN_WFC_EITC_MULTIPLIER
+    mn_tax_net = max(0.0, mn_tax_gross - wfc)
+
+    refund = req.mn_tax_withheld - mn_tax_net
+    eff_rate = (mn_tax_net / mn_agi * 100) if mn_agi > 0 else 0.0
+
+    if refund >= 0:
+        refund_str = f"an estimated MN state refund of ${refund:,.0f}"
+    else:
+        refund_str = f"an estimated ${abs(refund):,.0f} owed to Minnesota"
+
+    wfc_str = f" The Minnesota Working Family Credit (${wfc:,.0f}) has been applied." if wfc > 0 else ""
+
+    summary = (
+        f"Based on a Minnesota AGI of ${mn_agi:,.0f}, your estimated MN state income tax is "
+        f"${mn_tax_net:,.0f} (effective rate {eff_rate:.1f}%).{wfc_str} "
+        f"After withholding of ${req.mn_tax_withheld:,.0f}, you have {refund_str}."
+    )
+
+    return MNIncomeTaxResponse(
+        mn_agi=round(mn_agi, 2),
+        mn_standard_deduction=float(std_ded),
+        mn_personal_exemptions_total=round(total_exemptions, 2),
+        mn_taxable_income=round(mn_taxable, 2),
+        mn_income_tax_before_credits=round(mn_tax_gross, 2),
+        mn_working_family_credit=round(wfc, 2),
+        mn_tax_after_credits=round(mn_tax_net, 2),
+        mn_tax_withheld=req.mn_tax_withheld,
+        estimated_refund_or_owed=round(refund, 2),
+        effective_mn_rate_pct=round(eff_rate, 1),
+        summary=summary,
+        disclaimer=MN_TAX_DISCLAIMER,
+    )
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
