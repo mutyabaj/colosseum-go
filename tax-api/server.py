@@ -463,5 +463,145 @@ def mn_income_tax(req: MNIncomeTaxRequest):
     )
 
 
+# ── Minnesota Homeowner Property Tax Refund (M1PR) ────────────────────────────
+
+# 2024 homeowner M1PR copayment table: (income_upper_limit, copayment_rate)
+# Source: MN Dept of Revenue M1PR instructions — verify at revenue.state.mn.us
+_M1PR_HOMEOWNER_TABLE = [
+    (13_170,  0.010),
+    (21_440,  0.015),
+    (29_720,  0.020),
+    (38_000,  0.025),
+    (56_670,  0.030),
+    (73_220,  0.035),
+    (89_770,  0.040),
+    (98_040,  0.045),
+    (116_180, 0.050),
+]
+M1PR_HOMEOWNER_INCOME_LIMIT = 116_180
+M1PR_HOMEOWNER_MAX_REFUND   = 2_770
+M1PR_HOMEOWNER_SENIOR_BONUS = 0.20   # 65+ / disabled receive 20% additional
+
+
+class MNHomeownerRebateRequest(BaseModel):
+    household_income: float = Field(
+        description="Total household income from ALL sources — wages, Social Security, unemployment, pensions, etc."
+    )
+    property_taxes_paid: float = Field(
+        description="Net property taxes paid on your homestead during the year (from your property tax statement)"
+    )
+    age: int = Field(default=40, description="Age of primary filer")
+    is_disabled: bool = Field(default=False, description="Whether filer receives disability benefits")
+    prior_year_property_taxes: float = Field(
+        default=0.0,
+        description="Property taxes paid the prior year — used to check for the Special Property Tax Refund (large increase)"
+    )
+
+
+class MNHomeownerRebateResponse(BaseModel):
+    eligible: bool
+    estimated_refund: float
+    copayment: float
+    copayment_rate_pct: float
+    senior_or_disabled_bonus_applied: bool
+    special_refund_possible: bool
+    special_refund_note: str
+    income_limit: int
+    max_refund: int
+    summary: str
+    next_steps: str
+    disclaimer: str
+
+
+@app.post("/mn_homeowner_rebate", response_model=MNHomeownerRebateResponse)
+def mn_homeowner_rebate(req: MNHomeownerRebateRequest):
+    income = req.household_income
+
+    if income > M1PR_HOMEOWNER_INCOME_LIMIT:
+        return MNHomeownerRebateResponse(
+            eligible=False,
+            estimated_refund=0.0,
+            copayment=0.0,
+            copayment_rate_pct=0.0,
+            senior_or_disabled_bonus_applied=False,
+            special_refund_possible=False,
+            special_refund_note="",
+            income_limit=M1PR_HOMEOWNER_INCOME_LIMIT,
+            max_refund=M1PR_HOMEOWNER_MAX_REFUND,
+            summary=(
+                f"Based on a household income of ${income:,.0f}, you are over the 2024 income "
+                f"limit of ${M1PR_HOMEOWNER_INCOME_LIMIT:,} for the homeowner property tax refund."
+            ),
+            next_steps="You do not qualify this year. If income is lower next year, check again.",
+            disclaimer=MN_DISCLAIMER,
+        )
+
+    copayment_rate = _M1PR_HOMEOWNER_TABLE[-1][1]
+    for limit, rate in _M1PR_HOMEOWNER_TABLE:
+        if income <= limit:
+            copayment_rate = rate
+            break
+
+    copayment  = income * copayment_rate
+    base_refund = max(0.0, req.property_taxes_paid - copayment)
+
+    is_senior = req.age >= 65 or req.is_disabled
+    if is_senior:
+        base_refund *= (1 + M1PR_HOMEOWNER_SENIOR_BONUS)
+
+    refund = round(min(base_refund, M1PR_HOMEOWNER_MAX_REFUND), 2)
+
+    # Special Property Tax Refund: available if taxes increased more than 12% AND more than $100
+    special_possible = False
+    special_note = ""
+    if req.prior_year_property_taxes > 0:
+        increase = req.property_taxes_paid - req.prior_year_property_taxes
+        pct_increase = increase / req.prior_year_property_taxes if req.prior_year_property_taxes else 0
+        if increase > 100 and pct_increase > 0.12:
+            special_possible = True
+            special_note = (
+                f"Your property taxes increased by ${increase:,.0f} ({pct_increase*100:.0f}%) from last year. "
+                f"You may also qualify for the Special Property Tax Refund — there is no income limit for this. "
+                f"A VITA volunteer can calculate the exact amount."
+            )
+
+    if refund == 0:
+        summary = (
+            f"Based on household income of ${income:,.0f} and property taxes of ${req.property_taxes_paid:,.0f}, "
+            f"your estimated homeowner property tax refund is $0. "
+            f"Your copayment (${copayment:,.0f}) exceeds your property taxes."
+        )
+    else:
+        senior_note = " A senior/disability bonus of 20% has been applied." if is_senior else ""
+        summary = (
+            f"Good news! Based on household income of ${income:,.0f} and property taxes of "
+            f"${req.property_taxes_paid:,.0f}, you may qualify for a Minnesota Homeowner "
+            f"Property Tax Refund of approximately ${refund:,.0f}.{senior_note} "
+            f"This is filed on Form M1PR, due August 15."
+        )
+
+    next_steps = (
+        "To claim this refund: (1) Get your property tax statement from your county. "
+        "(2) File Form M1PR with the MN Dept of Revenue by August 15. "
+        "(3) A free VITA site can prepare this at no cost. "
+        "Note: you must have lived in the home as your primary residence."
+    )
+
+    return MNHomeownerRebateResponse(
+        eligible=refund > 0,
+        estimated_refund=refund,
+        copayment=round(copayment, 2),
+        copayment_rate_pct=round(copayment_rate * 100, 1),
+        senior_or_disabled_bonus_applied=is_senior,
+        special_refund_possible=special_possible,
+        special_refund_note=special_note,
+        income_limit=M1PR_HOMEOWNER_INCOME_LIMIT,
+        max_refund=M1PR_HOMEOWNER_MAX_REFUND,
+        summary=summary,
+        next_steps=next_steps,
+        disclaimer=MN_DISCLAIMER,
+    )
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
