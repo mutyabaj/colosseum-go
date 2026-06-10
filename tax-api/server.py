@@ -74,6 +74,7 @@ def run_taxcalc(req: TaxEstimateRequest) -> dict:
         "n24": [req.qualifying_children],       # children under 17 (CTC)
         "nu18": [req.qualifying_children],      # children under 18 (EITC)
         "nu13": [req.qualifying_children],      # children under 13 (CDCC)
+        "EIC": [min(req.qualifying_children, 3)],  # qualifying children for EITC
         "n1820": [0],
         "n21": [0],
         "XTOT": [1 + (1 if mars == 2 else 0) + req.qualifying_children + req.dependents_other],
