@@ -193,5 +193,149 @@ def health():
     return {"status": "ok", "tax_year": TAX_YEAR}
 
 
+# ── Minnesota Renters Property Tax Refund (M1PR) ──────────────────────────────
+
+MN_DISCLAIMER = (
+    "⚠️ ESTIMATE ONLY — This is not a filed M1PR return. "
+    "Amounts are approximate based on published MN Dept of Revenue tables. "
+    "Visit a free VITA site for an accurate M1PR prepared by an IRS-certified volunteer: "
+    "irs.gov/vita — or visit revenue.state.mn.us for the official M1PR instructions."
+)
+
+# 2024 M1PR Renter's Refund copayment table (income limit, copayment rate)
+# Source: MN Dept of Revenue M1PR instructions (verify at revenue.state.mn.us)
+_M1PR_TABLE = [
+    (7_110,  0.00),
+    (9_559,  0.01),
+    (12_009, 0.02),
+    (14_459, 0.03),
+    (16_909, 0.04),
+    (19_359, 0.05),
+    (21_809, 0.06),
+    (24_259, 0.07),
+    (29_159, 0.08),
+    (36_809, 0.09),
+    (44_459, 0.10),
+    (52_109, 0.11),
+    (59_759, 0.12),
+    (67_409, 0.13),
+    (72_230, 0.14),
+]
+M1PR_INCOME_LIMIT = 72_230
+M1PR_MAX_REFUND   = 2_770   # 2024 maximum renter's refund
+M1PR_RENT_TAX_PCT = 0.17    # MN treats 17% of rent as property tax paid
+# Seniors (65+) and totally disabled receive an additional 20% on top of base refund
+M1PR_SENIOR_BONUS = 0.20
+
+
+class MNRentersRebateRequest(BaseModel):
+    household_income: float = Field(
+        description="Total household income from ALL sources — wages, Social Security, unemployment, child support received, etc."
+    )
+    annual_rent_paid: float = Field(
+        description="Total rent paid in Minnesota during the year (from your Certificate of Rent Paid / CRP form)"
+    )
+    age: int = Field(default=40, description="Age of primary filer")
+    is_disabled: bool = Field(default=False, description="Whether filer receives disability benefits (qualifies for senior rate)")
+    months_in_mn: int = Field(default=12, description="Number of months rented in Minnesota (1–12)")
+
+
+class MNRentersRebateResponse(BaseModel):
+    eligible: bool
+    estimated_refund: float
+    net_rent: float
+    copayment: float
+    copayment_rate_pct: float
+    senior_or_disabled_bonus_applied: bool
+    income_limit: int
+    max_refund: int
+    summary: str
+    next_steps: str
+    disclaimer: str
+
+
+@app.post("/mn_renters_rebate", response_model=MNRentersRebateResponse)
+def mn_renters_rebate(req: MNRentersRebateRequest):
+    months = max(1, min(12, req.months_in_mn))
+
+    # Prorate household income and rent if partial-year resident
+    income = req.household_income * (months / 12)
+    rent   = req.annual_rent_paid  # CRP already covers only MN months
+
+    if income > M1PR_INCOME_LIMIT:
+        return MNRentersRebateResponse(
+            eligible=False,
+            estimated_refund=0.0,
+            net_rent=round(rent * M1PR_RENT_TAX_PCT, 2),
+            copayment=0.0,
+            copayment_rate_pct=0.0,
+            senior_or_disabled_bonus_applied=False,
+            income_limit=M1PR_INCOME_LIMIT,
+            max_refund=M1PR_MAX_REFUND,
+            summary=(
+                f"Based on a household income of ${req.household_income:,.0f}, "
+                f"you are over the {TAX_YEAR} income limit of ${M1PR_INCOME_LIMIT:,} "
+                f"for the Minnesota Renters Property Tax Refund."
+            ),
+            next_steps="You do not qualify for the renter's refund this year. If your income is lower next year, check again.",
+            disclaimer=MN_DISCLAIMER,
+        )
+
+    # Find copayment rate from table
+    copayment_rate = _M1PR_TABLE[-1][1]
+    for limit, rate in _M1PR_TABLE:
+        if income <= limit:
+            copayment_rate = rate
+            break
+
+    net_rent   = rent * M1PR_RENT_TAX_PCT
+    copayment  = income * copayment_rate
+    base_refund = max(0.0, net_rent - copayment)
+
+    # Senior / disability bonus
+    is_senior = req.age >= 65 or req.is_disabled
+    if is_senior:
+        base_refund *= (1 + M1PR_SENIOR_BONUS)
+
+    refund = round(min(base_refund, M1PR_MAX_REFUND), 2)
+
+    if refund == 0:
+        summary = (
+            f"Based on your household income of ${req.household_income:,.0f} and "
+            f"rent paid of ${req.annual_rent_paid:,.0f}, your estimated refund is $0. "
+            f"Your copayment (${copayment:,.0f}) exceeds the property-tax portion of your rent (${net_rent:,.0f})."
+        )
+    else:
+        senior_note = " A senior/disability bonus of 20% has been applied." if is_senior else ""
+        summary = (
+            f"Good news! Based on your household income of ${req.household_income:,.0f} and "
+            f"rent paid of ${req.annual_rent_paid:,.0f}, you may qualify for a "
+            f"Minnesota Renters Property Tax Refund of approximately ${refund:,.0f}.{senior_note} "
+            f"This is filed on Form M1PR, separate from your regular state return."
+        )
+
+    next_steps = (
+        "To claim this refund: (1) Get your Certificate of Rent Paid (CRP) from your landlord — "
+        "they are required by law to give it to you by January 31. "
+        "(2) File Form M1PR with the MN Dept of Revenue. "
+        "(3) A free VITA site can prepare this for you at no cost. "
+        "The deadline to file M1PR is August 15."
+    )
+
+    return MNRentersRebateResponse(
+        eligible=refund > 0,
+        estimated_refund=refund,
+        net_rent=round(net_rent, 2),
+        copayment=round(copayment, 2),
+        copayment_rate_pct=round(copayment_rate * 100, 1),
+        senior_or_disabled_bonus_applied=is_senior,
+        income_limit=M1PR_INCOME_LIMIT,
+        max_refund=M1PR_MAX_REFUND,
+        summary=summary,
+        next_steps=next_steps,
+        disclaimer=MN_DISCLAIMER,
+    )
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
