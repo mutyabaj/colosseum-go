@@ -146,7 +146,8 @@ def run_taxcalc(req: TaxEstimateRequest) -> dict:
 
     total_income = req.wages + req.self_employment_income + req.other_income
     effective_rate = (iitax / total_income * 100) if total_income > 0 else 0.0
-    refund_or_owed = req.federal_tax_withheld - iitax + eitc + ctc
+    # iitax already has EITC and CTC applied (may be negative for refundable credits)
+    refund_or_owed = req.federal_tax_withheld - iitax
 
     return {
         "federal_income_tax": round(iitax, 2),
