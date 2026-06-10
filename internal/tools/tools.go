@@ -1,11 +1,13 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -287,6 +289,51 @@ func (e *Executor) customTool(ctx context.Context, runCtx Context, name string, 
 			return ""
 		})
 		return e.shellExec(ctx, runCtx, json.RawMessage(fmt.Sprintf(`{"command":%q,"timeout_seconds":%d}`, rendered, cfg.TimeoutSeconds)))
+
+	case "http_tool":
+		var cfg struct {
+			URL            string            `json:"url"`
+			Method         string            `json:"method"`
+			Headers        map[string]string `json:"headers"`
+			TimeoutSeconds int               `json:"timeout_seconds"`
+		}
+		if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+			return Result{}, err
+		}
+		if cfg.URL == "" {
+			return Result{}, fmt.Errorf("http_tool missing url")
+		}
+		if cfg.Method == "" {
+			cfg.Method = "POST"
+		}
+		if cfg.TimeoutSeconds <= 0 {
+			cfg.TimeoutSeconds = 30
+		}
+		reqCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.TimeoutSeconds)*time.Second)
+		defer cancel()
+		httpReq, err := http.NewRequestWithContext(reqCtx, cfg.Method, cfg.URL, bytes.NewReader(input))
+		if err != nil {
+			return Result{}, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		for k, v := range cfg.Headers {
+			httpReq.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			return Result{}, err
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 300 {
+			return Result{}, fmt.Errorf("http_tool %s returned status %d: %s", cfg.URL, resp.StatusCode, string(body))
+		}
+		var out any
+		if err := json.Unmarshal(body, &out); err != nil {
+			return Result{Output: map[string]any{"result": string(body)}}, nil
+		}
+		return Result{Output: map[string]any{"result": out}}, nil
+
 	default:
 		return Result{}, fmt.Errorf("unsupported custom tool kind: %s", kind)
 	}
