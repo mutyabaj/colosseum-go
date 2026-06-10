@@ -153,7 +153,18 @@ func registerAPIRoutes(
 		r.Post("/credential-vaults/{id}/items", upsertCredentialVaultItemHandler(db))
 		r.Delete("/credential-vaults/{id}/items/{secretName}", deleteCredentialVaultItemHandler(db))
 		r.Get("/stream/runs/{id}", streamRunEventsHandler(db))
+
+		// Public chat API — no auth required (validated by per-agent public_token)
+		r.Get("/public/agents/{agentID}", publicGetAgentHandler(db))
+		r.Post("/public/chat/sessions", publicCreateSessionHandler(db))
+		r.Get("/public/chat/sessions/{sessionID}", publicGetSessionHandler(db))
+		r.Get("/public/chat/sessions/{sessionID}/messages", publicListMessagesHandler(db))
+		r.Post("/public/chat/sessions/{sessionID}/messages", publicSendMessageHandler(db, workspaceRoot, nil))
+		r.Get("/public/stream/runs/{runID}", publicStreamRunHandler(db))
 	})
+
+	// Public chat page — served outside /api, no auth required
+	r.Get("/c/{agentID}", publicChatPageHandler(db))
 }
 
 func enhancePromptHandler(providerMap map[string]providers.Client) http.HandlerFunc {

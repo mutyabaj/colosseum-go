@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adevireddy/colosseum/internal/providers"
@@ -44,6 +45,7 @@ func NewServer(
 	r.Use(middleware.Recoverer)
 	r.Use(requestLogger())
 	r.Use(timeoutExceptStream(120 * time.Second))
+	r.Use(customDomainRedirect(db))
 	if strings.TrimSpace(basicAuthUser) != "" && strings.TrimSpace(basicAuthPass) != "" {
 		r.Use(basicAuthMiddleware(basicAuthUser, basicAuthPass))
 	}
@@ -130,9 +132,17 @@ func timeoutExceptStream(d time.Duration) func(http.Handler) http.Handler {
 
 type basicAuthPassedKey struct{}
 
+func isPublicPath(path string) bool {
+	return strings.HasPrefix(path, "/c/") || strings.HasPrefix(path, "/api/public/")
+}
+
 func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isPublicPath(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			u, p, ok := r.BasicAuth()
 			if !ok || subtle.ConstantTimeCompare([]byte(u), []byte(user)) != 1 || subtle.ConstantTimeCompare([]byte(p), []byte(pass)) != 1 {
 				w.Header().Set("WWW-Authenticate", `Basic realm="Colosseum"`)
@@ -144,10 +154,59 @@ func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {
 	}
 }
 
+// customDomainRedirect looks up agents by custom_domain and redirects to /c/:agentID.
+func customDomainRedirect(db *sql.DB) func(http.Handler) http.Handler {
+	type entry struct {
+		agentID string
+		exp     time.Time
+	}
+	var mu sync.RWMutex
+	cache := map[string]entry{}
+
+	lookup := func(host string) string {
+		mu.RLock()
+		if e, ok := cache[host]; ok && time.Now().Before(e.exp) {
+			mu.RUnlock()
+			return e.agentID
+		}
+		mu.RUnlock()
+
+		var id string
+		_ = db.QueryRow(
+			"SELECT id FROM agents WHERE custom_domain=? AND is_public=1 LIMIT 1", host,
+		).Scan(&id)
+
+		mu.Lock()
+		cache[host] = entry{agentID: id, exp: time.Now().Add(60 * time.Second)}
+		mu.Unlock()
+		return id
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host := r.Host
+			if i := strings.IndexByte(host, ':'); i != -1 {
+				host = host[:i]
+			}
+			if host != "" && r.URL.Path == "/" {
+				if agentID := lookup(host); agentID != "" {
+					http.Redirect(w, r, "/c/"+agentID, http.StatusFound)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func apiAuthMiddleware(apiAuthToken string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !strings.HasPrefix(r.URL.Path, "/api/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if isPublicPath(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}
