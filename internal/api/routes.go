@@ -168,6 +168,9 @@ func registerAPIRoutes(
 
 	// Twilio SMS webhook — auth bypassed, validated by Twilio signature instead
 	r.Post("/sms/inbound", smsInboundHandler(db, workspaceRoot))
+
+	// Twilio WhatsApp webhook — same pattern as SMS, whatsapp: prefix on numbers
+	r.Post("/whatsapp/inbound", whatsappInboundHandler(db, workspaceRoot))
 }
 
 func enhancePromptHandler(providerMap map[string]providers.Client) http.HandlerFunc {

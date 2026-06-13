@@ -165,6 +165,158 @@ func waitForRunResult(ctx context.Context, db *sql.DB, runID string, timeout tim
 	return "Your request is taking longer than expected. Please try again in a moment.", nil
 }
 
+// resolveWebhookURL returns the URL Twilio signed for this request.
+// If the envOverride variable is set, it is used as-is (eliminates proxy ambiguity).
+// Otherwise the URL is reconstructed from the request headers.
+func resolveWebhookURL(r *http.Request, envOverride string) string {
+	if v := strings.TrimSpace(os.Getenv(envOverride)); v != "" {
+		return v
+	}
+	scheme := "https"
+	if r.TLS == nil && !strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "http"
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.Path)
+}
+
+// whatsappConfig holds credentials for the Twilio WhatsApp channel.
+type whatsappConfig struct {
+	AccountSID string // TWILIO_ACCOUNT_SID (shared with SMS)
+	AuthToken  string // TWILIO_AUTH_TOKEN (shared with SMS)
+	FromNumber string // TWILIO_WHATSAPP_NUMBER  e.g. +16513027258
+	AgentID    string // TWILIO_WHATSAPP_AGENT_ID
+}
+
+func loadWhatsAppConfig() whatsappConfig {
+	return whatsappConfig{
+		AccountSID: os.Getenv("TWILIO_ACCOUNT_SID"),
+		AuthToken:  os.Getenv("TWILIO_AUTH_TOKEN"),
+		FromNumber: os.Getenv("TWILIO_WHATSAPP_NUMBER"),
+		AgentID:    os.Getenv("TWILIO_WHATSAPP_AGENT_ID"),
+	}
+}
+
+func (wc whatsappConfig) ready() bool {
+	return wc.AccountSID != "" && wc.AuthToken != "" && wc.FromNumber != "" && wc.AgentID != ""
+}
+
+// sendWhatsApp sends an outbound WhatsApp message via Twilio.
+// from/to should be plain E.164 numbers; the whatsapp: prefix is added here.
+func sendWhatsApp(accountSID, authToken, from, to, body string) error {
+	if len(body) > 4096 {
+		body = body[:4093] + "..."
+	}
+	if !strings.HasPrefix(from, "whatsapp:") {
+		from = "whatsapp:" + from
+	}
+	if !strings.HasPrefix(to, "whatsapp:") {
+		to = "whatsapp:" + to
+	}
+	form := url.Values{}
+	form.Set("From", from)
+	form.Set("To", to)
+	form.Set("Body", body)
+
+	apiURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json", accountSID)
+	req, err := http.NewRequest(http.MethodPost, apiURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(accountSID, authToken)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("twilio whatsapp send failed status=%d body=%s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// whatsappInboundHandler handles POST /whatsapp/inbound from Twilio.
+// Twilio sends WhatsApp messages with From=whatsapp:+number; we store that
+// prefix in sms_sessions so WhatsApp sessions are naturally separate from SMS.
+func whatsappInboundHandler(db *sql.DB, workspaceRoot string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		wc := loadWhatsAppConfig()
+		if !wc.ready() {
+			log.Printf("level=WARN msg=\"WhatsApp inbound: not configured, dropping request\"")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		fullURL := resolveWebhookURL(r, "TWILIO_WHATSAPP_WEBHOOK_URL")
+		params := map[string]string{}
+		for k, v := range r.PostForm {
+			if len(v) > 0 {
+				params[k] = v[0]
+			}
+		}
+		sig := r.Header.Get("X-Twilio-Signature")
+		if sig != "" && !validateTwilioSignature(wc.AuthToken, fullURL, sig, params) {
+			log.Printf("level=WARN msg=\"WhatsApp inbound: invalid Twilio signature url=%s from=%s\"", fullURL, r.RemoteAddr)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
+		from := strings.TrimSpace(r.FormValue("From"))
+		body := strings.TrimSpace(r.FormValue("Body"))
+
+		if from == "" || body == "" {
+			w.Header().Set("Content-Type", "text/xml")
+			fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><Response/>`)
+			return
+		}
+
+		log.Printf("level=INFO msg=\"WhatsApp inbound\" from=%s body_len=%d", from, len(body))
+
+		w.Header().Set("Content-Type", "text/xml")
+		fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><Response/>`)
+
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			sessionID, err := getOrCreateSMSSession(ctx, db, from, wc.AgentID)
+			if err != nil {
+				log.Printf("level=ERROR msg=\"WhatsApp session error\" from=%s err=%v", from, err)
+				_ = sendWhatsApp(wc.AccountSID, wc.AuthToken, wc.FromNumber, from,
+					"Sorry, we encountered an error. Please try again.")
+				return
+			}
+
+			runID, _, err := createRunForSessionMessage(ctx, db, workspaceRoot, sessionID, body, "queued")
+			if err != nil {
+				log.Printf("level=ERROR msg=\"WhatsApp run error\" from=%s err=%v", from, err)
+				_ = sendWhatsApp(wc.AccountSID, wc.AuthToken, wc.FromNumber, from,
+					"Sorry, we encountered an error. Please try again.")
+				return
+			}
+
+			reply, err := waitForRunResult(ctx, db, runID, 4*time.Minute)
+			if err != nil {
+				log.Printf("level=ERROR msg=\"WhatsApp wait error\" from=%s run=%s err=%v", from, runID, err)
+				reply = "Sorry, the request timed out. Please try again."
+			}
+
+			if err := sendWhatsApp(wc.AccountSID, wc.AuthToken, wc.FromNumber, from, reply); err != nil {
+				log.Printf("level=ERROR msg=\"WhatsApp reply error\" from=%s err=%v", from, err)
+			} else {
+				log.Printf("level=INFO msg=\"WhatsApp reply sent\" from=%s run=%s", from, runID)
+			}
+		}()
+	}
+}
+
 // smsInboundHandler handles POST /sms/inbound from Twilio.
 func smsInboundHandler(db *sql.DB, workspaceRoot string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -181,11 +333,7 @@ func smsInboundHandler(db *sql.DB, workspaceRoot string) http.HandlerFunc {
 		}
 
 		// Validate Twilio signature.
-		scheme := "https"
-		if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
-			scheme = "http"
-		}
-		fullURL := fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.Path)
+		fullURL := resolveWebhookURL(r, "TWILIO_SMS_WEBHOOK_URL")
 		params := map[string]string{}
 		for k, v := range r.PostForm {
 			if len(v) > 0 {
@@ -194,7 +342,7 @@ func smsInboundHandler(db *sql.DB, workspaceRoot string) http.HandlerFunc {
 		}
 		sig := r.Header.Get("X-Twilio-Signature")
 		if sig != "" && !validateTwilioSignature(tc.AuthToken, fullURL, sig, params) {
-			log.Printf("level=WARN msg=\"SMS inbound: invalid Twilio signature from %s\"", r.RemoteAddr)
+			log.Printf("level=WARN msg=\"SMS inbound: invalid Twilio signature url=%s from=%s\"", fullURL, r.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
