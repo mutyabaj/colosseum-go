@@ -341,10 +341,15 @@ func smsInboundHandler(db *sql.DB, workspaceRoot string) http.HandlerFunc {
 			}
 		}
 		sig := r.Header.Get("X-Twilio-Signature")
-		if sig != "" && !validateTwilioSignature(tc.AuthToken, fullURL, sig, params) {
-			log.Printf("level=WARN msg=\"SMS inbound: invalid Twilio signature url=%s from=%s\"", fullURL, r.RemoteAddr)
+		skipSigCheck := os.Getenv("TWILIO_SKIP_SIG_VALIDATION") == "1"
+		if !skipSigCheck && sig != "" && !validateTwilioSignature(tc.AuthToken, fullURL, sig, params) {
+			log.Printf("level=WARN msg=\"SMS inbound: invalid Twilio signature url=%s from=%s token_len=%d\"",
+				fullURL, r.RemoteAddr, len(tc.AuthToken))
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
+		}
+		if skipSigCheck {
+			log.Printf("level=WARN msg=\"SMS inbound: signature validation SKIPPED (debug mode)\"")
 		}
 
 		from := strings.TrimSpace(r.FormValue("From"))
