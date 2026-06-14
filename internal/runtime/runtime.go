@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/adevireddy/colosseum/internal/mcp"
 	"github.com/adevireddy/colosseum/internal/policy"
 	"github.com/adevireddy/colosseum/internal/providers"
 	"github.com/adevireddy/colosseum/internal/secrets"
@@ -262,6 +263,12 @@ func (m *Manager) run(ctx context.Context, runID, agentID, task, workspace, prov
 	}
 	providerTools := filterProviderTools(toolDefs, allowedTools)
 
+	mcpSession := mcp.NewSession(ctx, m.DB, agentID)
+	defer mcpSession.Close()
+	if mcpTools := mcpSession.ListAllTools(ctx); len(mcpTools) > 0 {
+		providerTools = append(providerTools, mcpTools...)
+	}
+
 	for step := 1; step <= maxSteps; step++ {
 		if ctx.Err() != nil {
 			_ = m.Store.AppendEvent(context.Background(), runID, "", "run.cancelled_by_shutdown", map[string]any{"reason": "context_cancelled"})
@@ -396,11 +403,19 @@ func (m *Manager) run(ctx context.Context, runID, agentID, task, workspace, prov
 			m.execDB(ctx, "insert tool call", `INSERT INTO tool_calls(id,run_id,step_id,tool_name,input_json,status,started_at) VALUES(?,?,?,?,?,?,?)`, toolCallID, runID, stepID, tc.Name, string(tc.Arguments), "running", now())
 			toolSpanID := uuid.NewString()
 			m.execDB(ctx, "insert tool trace span", `INSERT INTO trace_spans(id,run_id,parent_id,name,kind,status,started_at,attrs_json) VALUES(?,?,?,?,?,?,?,?)`, toolSpanID, runID, modelSpanID, "tool."+tc.Name, "tool", "running", now(), `{"step_id":"`+stepID+`","tool_call_id":"`+toolCallID+`"}`)
-			result, execErr := m.Tools.Execute(ctx, tools.Context{
-				RunID: runID, StepID: stepID, Workspace: workspace,
-				EnvironmentID: resources.EnvironmentID, CredentialVaultID: resources.VaultID,
-				EnvVars: resources.EnvVars,
-			}, tc.Name, tc.Arguments)
+			var result tools.Result
+			var execErr error
+			if _, _, isMCP := mcp.ParseToolName(tc.Name); isMCP {
+				var text string
+				text, execErr = mcpSession.CallTool(ctx, tc.Name, tc.Arguments)
+				result = tools.Result{Output: map[string]any{"text": text}}
+			} else {
+				result, execErr = m.Tools.Execute(ctx, tools.Context{
+					RunID: runID, StepID: stepID, Workspace: workspace,
+					EnvironmentID: resources.EnvironmentID, CredentialVaultID: resources.VaultID,
+					EnvVars: resources.EnvVars,
+				}, tc.Name, tc.Arguments)
+			}
 			outputJSON, _ := json.Marshal(result.Output)
 			status := "completed"
 			errClass := ""

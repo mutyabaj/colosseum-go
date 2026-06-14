@@ -171,6 +171,9 @@ func registerAPIRoutes(
 
 	// Twilio WhatsApp webhook — same pattern as SMS, whatsapp: prefix on numbers
 	r.Post("/whatsapp/inbound", whatsappInboundHandler(db, workspaceRoot))
+
+	// MCP server management
+	registerMCPRoutes(r, db)
 }
 
 func enhancePromptHandler(providerMap map[string]providers.Client) http.HandlerFunc {
