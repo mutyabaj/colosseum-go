@@ -34,7 +34,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 1001 colosseum \
-    && useradd --uid 1001 --gid colosseum --no-create-home colosseum
+    && useradd --uid 1001 --gid colosseum --create-home colosseum
 
 WORKDIR /app
 RUN mkdir -p /data/db /data/artifacts /data/workspaces \
