@@ -42,6 +42,7 @@ RUN mkdir -p /data/db /data/artifacts /data/workspaces \
 
 COPY --from=go-build /app/bin/colosseum /usr/local/bin/colosseum
 COPY presentation/ /app/presentation/
+COPY mcp-servers/ /app/mcp-servers/
 
 ENV COLOSSEUM_PORT=8080
 ENV COLOSSEUM_DB_PATH=/data/db/colosseum.db
