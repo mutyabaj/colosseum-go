@@ -30,7 +30,8 @@ RUN apt-get update \
         sqlite3 \
         ripgrep \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
+    && apt-get install -y --no-install-recommends nodejs python3 python3-pip \
+    && pip3 install --break-system-packages pdfminer.six \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 1001 colosseum \
