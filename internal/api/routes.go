@@ -172,6 +172,9 @@ func registerAPIRoutes(
 	// Twilio WhatsApp webhook — same pattern as SMS, whatsapp: prefix on numbers
 	r.Post("/whatsapp/inbound", whatsappInboundHandler(db, workspaceRoot))
 
+	// Twilio Voice webhook — VITA IVR with auto-SMS booking link
+	registerVoiceRoutes(r)
+
 	// MCP server management
 	registerMCPRoutes(r, db)
 }
