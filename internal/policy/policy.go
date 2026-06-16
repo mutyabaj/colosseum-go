@@ -27,6 +27,12 @@ var riskyPatterns = []*regexp.Regexp{
 }
 
 func EvaluateTool(toolName string, input json.RawMessage, allowed []string) Decision {
+	// MCP tools are authorized at the agent-server assignment level (agent_mcp_servers table),
+	// so they bypass the allowed_tools gate here.
+	if strings.HasPrefix(toolName, "mcp__") {
+		return Decision{Allow: true}
+	}
+
 	if len(allowed) > 0 {
 		ok := false
 		for _, t := range allowed {
