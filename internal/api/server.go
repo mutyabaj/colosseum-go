@@ -135,6 +135,7 @@ type basicAuthPassedKey struct{}
 func isPublicPath(path string) bool {
 	return strings.HasPrefix(path, "/c/") ||
 		strings.HasPrefix(path, "/api/public/") ||
+		strings.HasPrefix(path, "/voice/") ||
 		path == "/sms/inbound" ||
 		path == "/whatsapp/inbound"
 }
