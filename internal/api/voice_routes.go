@@ -51,7 +51,7 @@ func vitaVoiceInboundHandler() http.HandlerFunc {
 		from := strings.TrimSpace(r.FormValue("From"))
 		if from != "" {
 			tc := loadTwilioConfig()
-			if tc.ready() {
+			if tc.AccountSID != "" && tc.AuthToken != "" && tc.FromNumber != "" {
 				smsBody := fmt.Sprintf(
 					"EquiVoice free VITA tax prep — schedule your appointment:\n%s\n\n"+
 						"Saturdays at St. Paul Public Library (1st & 2nd Sat) or Rondo Community Library (last 2 Sat). "+
@@ -130,7 +130,7 @@ func vitaVoiceVoicemailDoneHandler() http.HandlerFunc {
 		notifyNumber := strings.TrimSpace(os.Getenv("VITA_VOICEMAIL_NOTIFY_NUMBER"))
 		if notifyNumber != "" && recordingURL != "" {
 			tc := loadTwilioConfig()
-			if tc.ready() {
+			if tc.AccountSID != "" && tc.AuthToken != "" && tc.FromNumber != "" {
 				msg := fmt.Sprintf("VITA voicemail from %s (%ss): %s.mp3", from, duration, recordingURL)
 				if err := sendSMS(tc.AccountSID, tc.AuthToken, tc.FromNumber, notifyNumber, msg); err != nil {
 					log.Printf("level=WARN msg=\"VITA voicemail: failed to notify admin\" err=%v", err)
