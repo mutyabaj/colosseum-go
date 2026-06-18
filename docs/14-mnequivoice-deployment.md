@@ -3,7 +3,7 @@
 **Organization:** Minnesota EquiVoice Partnership (MN-EVP), 501(c)(3)  
 **Primary domain:** mnequivoicepartnership.org  
 **Colosseum instance:** colosseum.mnequivoicepartnership.org  
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-18
 
 ---
 
@@ -17,10 +17,11 @@
 6. [Environment Variables](#6-environment-variables)
 7. [Phone System](#7-phone-system)
 8. [FreePBX — Volunteer Phone System](#8-freepbx--volunteer-phone-system)
-9. [DNS](#9-dns)
-10. [CI/CD — Coolify](#10-cicd--coolify)
-11. [Persistent Storage](#11-persistent-storage)
-12. [Pending Items](#12-pending-items)
+9. [Adding a New Extension](#9-adding-a-new-extension)
+10. [DNS](#10-dns)
+11. [CI/CD — Coolify](#11-cicd--coolify)
+12. [Persistent Storage](#12-persistent-storage)
+13. [Pending Items](#13-pending-items)
 
 ---
 
@@ -48,11 +49,13 @@
                         │          Azure VM — FreePBX             │
                         │             20.9.49.33                  │
                         │                                         │
-  Twilio SIP trunk ────▶│  FreePBX / Asterisk (port 5060 UDP/TCP) │
+  Twilio SIP trunk ────▶│  FreePBX / Asterisk                     │
+                        │    port 5060 UDP/TCP (trunk + legacy)   │
+                        │    port 5061 TCP/TLS (softphones)       │
                         │    ├── Extension 101  (spare)           │
                         │    └── Extension 102  (Fred Kigundu)    │
                         │                                         │
-  Linphone (softphone) ◀│  voice.mnequivoicepartnership.org       │
+  Linphone (TLS+SRTP)  ◀│  voice.mnequivoicepartnership.org       │
                         └─────────────────────────────────────────┘
 
   Twilio Numbers
@@ -244,7 +247,7 @@ Set in Coolify → Colosseum application → Environment Variables.
 | Variable | Description |
 |----------|-------------|
 | `VITA_BOOKING_URL` | Override default Microsoft Bookings link (optional) |
-| `VITA_VOICEMAIL_NOTIFY_NUMBER` | Mobile number to receive SMS when a voicemail is left (e.g. `+16512956509`) — **not yet set, needs adding** |
+| `VITA_VOICEMAIL_NOTIFY_NUMBER` | Mobile number to receive SMS when a voicemail is left via VITA IVR (e.g. `+16512956509`) |
 
 ### AI Providers
 
@@ -284,15 +287,16 @@ Set in Coolify → Colosseum application → Environment Variables.
 
 ### A2P 10DLC Registration
 
-**Status:** Pending — SMS messages are currently **Undelivered** by carriers.
+**Status:** **In Review** (submitted 2026-06-13) — SMS messages are currently **Undelivered** by carriers until approved.
 
-To complete:
-1. Publish `vita-page.html` to WordPress at `/vita-tce-services`
-2. Publish `privacy-policy.html` to WordPress at `/privacy-policy`
-3. Resubmit A2P campaign with:
-   - CTA URL: `https://mnequivoicepartnership.org/vita-tce-services`
-   - Privacy Policy URL: `https://mnequivoicepartnership.org/privacy-policy`
-4. After approval, remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify
+Campaign SID: `CM70cd3063a4406b93308762ce3177ca5b`  
+Brand: Minnesota EquiVoice Partnership (`BN54a91bdb1ddd80348c84fc92ef35b758`)  
+Messaging service: `MG91900402c4f9f2500f8832adf07d8452`
+
+CTA URL: `https://mnequivoicepartnership.org/vita-tce-services`  
+Privacy Policy URL: `https://mnequivoicepartnership.org/privacy-policy`
+
+After approval: remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify.
 
 ---
 
@@ -316,11 +320,56 @@ To complete:
 | SIP Server | `voice.mnequivoicepartnership.org` |
 | Username | `102` |
 | Password | Secret from FreePBX extension 102 |
-| Transport | UDP |
-| Port | 5060 |
+| Transport | **TLS** |
+| Port | **5061** |
+| Media encryption | None (deferred — Linphone SRTP is global; would break secondary Ubiquiti account) |
 | Outbound CID | `+16515151968` |
 
 > **Note:** Linphone on mobile drops SIP registration when backgrounded. Enable "Keep alive" and disable battery optimization for reliable inbound calls. Desktop Zoiper is more reliable for always-on use.
+
+### FreePBX TLS / HTTPS
+
+| Component | Configuration |
+|-----------|--------------|
+| Web HTTPS | Apache with Let's Encrypt cert (`voice.mnequivoicepartnership.org`) |
+| Cert location | `/etc/letsencrypt/live/voice.mnequivoicepartnership.org/` |
+| Cert copy (Asterisk) | `/etc/asterisk/keys/voice.mnequivoicepartnership.org.{crt,key}` |
+| TLS protocol | TLSv1.2 + TLSv1.3 only (TLSv1/1.1 disabled in `sangoma-ssl.conf`) |
+| SIP TLS transport | `[0.0.0.0-tls]` in `/etc/asterisk/pjsip.transports_custom.conf` |
+| SIP TLS method | `tlsv1_2` (minimum TLS 1.2) |
+| HTTP → HTTPS redirect | Configured in Apache `sangoma.conf` via RewriteRule |
+| Cert renewal | Let's Encrypt auto-renews; after renewal copy to `/etc/asterisk/keys/` and run `fwconsole certificates --import` |
+
+### Intrusion Detection (Fail2ban)
+
+Active with 10 jails: `asterisk-iptables`, `pbx-gui`, `sshd`, `recidive`, and others. No additional configuration needed.
+
+To check status:
+```bash
+sudo fail2ban-client status
+sudo fail2ban-client status asterisk-iptables
+sudo fail2ban-client status recidive
+```
+
+### SMTP (Voicemail-to-Email)
+
+Email is relayed via **Resend** (smtp.resend.com:587). Voicemail emails arrive from `pbx@mnequivoicepartnership.org`.
+
+| File | Purpose |
+|------|---------|
+| `/etc/postfix/sasl_passwd` | Resend API key credentials |
+| `/etc/postfix/sender_canonical` | Maps `root` and `asterisk` → `pbx@mnequivoicepartnership.org` |
+
+### Voicemail — Extensions
+
+| Ext | Name | Email | Attachment |
+|-----|------|-------|------------|
+| 101 | John Mutyaba | john.mutyaba@mnequivoicepartnership.org | Yes |
+| 102 | Fred Kigundu | fred.kigundu@mnequivoicepartnership.org | Yes |
+
+### Notifications
+
+Admin → System Admin → Notifications: all alerts go to `info@mnequivoicepartnership.org` (aliased to John).
 
 ### Inbound Routes
 
@@ -361,7 +410,84 @@ Added via `fwconsole firewall add trusted`:
 
 ---
 
-## 9. DNS
+## 9. Adding a New Extension
+
+Follow these steps each time a new volunteer softphone is added.
+
+### Step 1 — Buy a Twilio number (if the extension needs its own DID)
+
+1. Twilio Console → Phone Numbers → Buy a Number → select a Minnesota (651/612/763/952) number
+2. Set Voice handling to **SIP Trunk** → **MNEquivoiceSIP**
+3. Do **not** add the number to the trunk's NUMBERS tab — that overrides the inbound route
+
+### Step 2 — Create the extension in FreePBX
+
+**Applications → Extensions → Add Extension → PJSIP**
+
+| Tab | Field | Value |
+|-----|-------|-------|
+| General | Extension | Next available (e.g. 103) |
+| General | Display Name | Volunteer's full name |
+| General | Secret | Generate a strong password — this is the SIP password |
+| General | Outbound CID | `+1XXXXXXXXXX` (the Twilio DID for this extension) |
+| Voicemail | Enabled | Yes |
+| Voicemail | Email Address | volunteer@mnequivoicepartnership.org |
+| Voicemail | Email Attachment | **Yes** |
+| Voicemail | Pager Email | Leave blank (avoids duplicate emails) |
+| Advanced | Media Encryption | **SRTP via in-SDP (recommended)** |
+| Advanced | Transport | Auto |
+
+Click **Submit** → **Apply Config** (red button, top right).
+
+### Step 3 — Create an inbound route
+
+**Connectivity → Inbound Routes → Add Incoming Route**
+
+| Field | Value |
+|-------|-------|
+| Description | Volunteer name / number |
+| DID Number | `+1XXXXXXXXXX` (full E.164 format — Twilio sends with `+1`) |
+| Destination | Extensions → [new extension] |
+
+Click **Submit** → **Apply Config**.
+
+### Step 4 — Configure Linphone on the volunteer's phone
+
+Install Linphone (iOS or Android), then:
+
+**Settings → SIP Accounts → Add account**
+
+| Field | Value |
+|-------|-------|
+| Username | Extension number (e.g. `103`) |
+| SIP Domain | `voice.mnequivoicepartnership.org` |
+| Password | Secret from Step 2 |
+| Transport | **TLS** |
+| Port | **5061** |
+
+**Settings → Audio → Media encryption** → **SRTP**
+
+After saving, Linphone should register (green dot). Test with an inbound call from a cell phone and an outbound call to a cell phone.
+
+**Mobile keep-alive:** Enable keep-alive in Linphone settings and disable battery optimization for the Linphone app, otherwise the OS will kill the registration when the app is backgrounded.
+
+### Step 5 — Test
+
+| Test | Expected result |
+|------|-----------------|
+| Call the Twilio DID from a cell | Linphone rings |
+| Answer and speak | Audio clear in both directions |
+| Call from Linphone to an external number | Caller ID shows the Twilio DID |
+| Call from Linphone to extension 102 | Extension 102 rings (free, no trunk used) |
+| Let call go to voicemail | Volunteer receives email with `.wav` attachment |
+
+### Step 6 — Document
+
+Add the extension to the Extensions table in Section 8 and update the Architecture Overview.
+
+---
+
+## 10. DNS
 
 All records point to Colosseum VM (128.203.195.79) unless noted.
 
@@ -375,7 +501,7 @@ All records point to Colosseum VM (128.203.195.79) unless noted.
 
 ---
 
-## 10. CI/CD — Coolify
+## 11. CI/CD — Coolify
 
 **Dashboard:** https://coolify.mnequivoicepartnership.org  
 **Direct (IP):** http://128.203.195.79:8000 (restricted to admin IP)  
@@ -390,7 +516,7 @@ sudo /opt/equivoice-scripts/restore-docs.sh
 
 ---
 
-## 11. Persistent Storage
+## 12. Persistent Storage
 
 | Path | Volume | Contents |
 |------|--------|----------|
@@ -400,16 +526,14 @@ sudo /opt/equivoice-scripts/restore-docs.sh
 
 ---
 
-## 12. Pending Items
+## 13. Pending Items
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Add `VITA_VOICEMAIL_NOTIFY_NUMBER` in Coolify | High | Admin mobile number for voicemail SMS alerts |
-| Publish vita-page.html to WordPress (`/vita-tce-services`) | High | Required for A2P campaign resubmission |
-| Publish privacy-policy.html to WordPress (`/privacy-policy`) | High | Required for A2P campaign resubmission |
-| Resubmit A2P 10DLC campaign | High | Unblocks SMS delivery |
-| Remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify | Medium | After A2P campaign approved |
+| Remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify | High | After A2P campaign approved (currently **In Review** since 2026-06-13) |
+| Enable SRTP for ext 102 | Low | Deferred — Linphone SRTP is global and would break Ubiquiti desk phone account. Revisit when Ubiquiti is ported to FreePBX or a per-account SRTP softphone (e.g. Zoiper) replaces Linphone |
+| Configure Linphone keep-alive / disable battery optimization | Medium | Prevents registration drops when app is backgrounded |
 | Configure `vita.mnequivoicepartnership.org` DNS A record → 128.203.195.79 | Low | Not yet active |
 | Add street addresses to vita-page.html location cards | Low | Currently shows placeholder branch names |
 | Add extension 101 assignment | Low | Spare extension, assign when next volunteer onboards |
-| Configure Linphone keep-alive / disable battery optimization | Medium | Prevents registration drops on mobile |
+| Renew Asterisk TLS cert after Let's Encrypt renewal | Recurring | Cert expires 2026-08-21; copy to `/etc/asterisk/keys/` and run `fwconsole certificates --import` |

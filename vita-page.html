@@ -1,0 +1,554 @@
+<!-- ============================================================
+     MN EquiVoice Partnership — VITA/TCE Services Page
+     Paste into WordPress > Pages > Custom HTML block
+     or use with any page builder as raw HTML
+     ============================================================ -->
+
+<style>
+/* ── Reset & base ─────────────────────────────────────────── */
+.ev-vita * { box-sizing: border-box; margin: 0; padding: 0; }
+.ev-vita {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #1a1a2e;
+  line-height: 1.6;
+}
+.ev-vita a { color: #1a3a6b; }
+.ev-vita img { max-width: 100%; }
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.ev-vita-hero {
+  background: linear-gradient(135deg, #1a3a6b 0%, #0d2347 100%);
+  color: #fff;
+  padding: 72px 24px 60px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.ev-vita-hero::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 300px; height: 300px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+}
+.ev-vita-hero-badge {
+  display: inline-block;
+  background: #e8a020;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+.ev-vita-hero h1 {
+  font-size: clamp(28px, 5vw, 48px);
+  font-weight: 800;
+  line-height: 1.15;
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+.ev-vita-hero h1 span { color: #e8a020; }
+.ev-vita-hero p {
+  font-size: clamp(16px, 2vw, 20px);
+  opacity: 0.9;
+  max-width: 620px;
+  margin: 0 auto 36px;
+}
+.ev-vita-hero-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+.ev-btn-primary {
+  background: #e8a020;
+  color: #fff;
+  padding: 16px 32px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  text-decoration: none;
+  display: inline-block;
+  transition: background 0.2s, transform 0.1s;
+}
+.ev-btn-primary:hover { background: #cf8d16; color: #fff; transform: translateY(-1px); }
+.ev-btn-outline {
+  background: transparent;
+  color: #fff;
+  padding: 16px 32px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  text-decoration: none;
+  display: inline-block;
+  border: 2px solid rgba(255,255,255,0.5);
+  transition: border-color 0.2s, background 0.2s;
+}
+.ev-btn-outline:hover { border-color: #fff; background: rgba(255,255,255,0.08); color: #fff; }
+
+/* ── Eligibility strip ────────────────────────────────────── */
+.ev-vita-eligibility {
+  background: #e8a020;
+  color: #fff;
+  text-align: center;
+  padding: 18px 24px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ev-vita-eligibility strong { font-weight: 800; }
+
+/* ── Section wrapper ──────────────────────────────────────── */
+.ev-section {
+  padding: 64px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.ev-section-alt { background: #f4f7fb; }
+.ev-section-alt .ev-section { margin: 0 auto; }
+.ev-section-full { padding: 64px 24px; }
+
+.ev-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #e8a020;
+  margin-bottom: 10px;
+}
+.ev-section h2 {
+  font-size: clamp(24px, 3.5vw, 36px);
+  font-weight: 800;
+  color: #1a3a6b;
+  margin-bottom: 14px;
+  letter-spacing: -0.3px;
+}
+.ev-section-intro {
+  font-size: 17px;
+  color: #555;
+  max-width: 680px;
+  margin-bottom: 44px;
+}
+
+/* ── What's covered grid ──────────────────────────────────── */
+.ev-services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+.ev-service-card {
+  background: #fff;
+  border: 1px solid #e0e8f4;
+  border-radius: 12px;
+  padding: 28px 24px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.ev-service-icon {
+  width: 44px;
+  height: 44px;
+  background: #e8f0fb;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.ev-service-card h3 { font-size: 15px; font-weight: 700; color: #1a3a6b; margin-bottom: 6px; }
+.ev-service-card p { font-size: 14px; color: #666; }
+
+/* ── Appointment types ────────────────────────────────────── */
+.ev-appt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-top: 8px;
+}
+.ev-appt-card {
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 16px rgba(26,58,107,0.08);
+  border-top: 4px solid #1a3a6b;
+}
+.ev-appt-card.accent { border-top-color: #e8a020; }
+.ev-appt-card.green  { border-top-color: #2a8a4a; }
+.ev-appt-card-body { padding: 28px 24px; }
+.ev-appt-card h3 { font-size: 18px; font-weight: 800; color: #1a3a6b; margin-bottom: 8px; }
+.ev-appt-card p { font-size: 14px; color: #555; margin-bottom: 16px; }
+.ev-appt-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #e8f0fb;
+  color: #1a3a6b;
+}
+.ev-appt-tag.orange { background: #fef3e0; color: #b87a10; }
+.ev-appt-tag.green  { background: #e6f4eb; color: #1e6b38; }
+
+/* ── Location cards ───────────────────────────────────────── */
+.ev-locations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+.ev-location-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 32px 28px;
+  box-shadow: 0 2px 16px rgba(26,58,107,0.08);
+  border-left: 5px solid #1a3a6b;
+}
+.ev-location-card.rondo { border-left-color: #e8a020; }
+.ev-location-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1a3a6b;
+  margin-bottom: 6px;
+}
+.ev-location-addr {
+  font-size: 14px;
+  color: #777;
+  margin-bottom: 18px;
+}
+.ev-schedule-pill {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  background: #e8f0fb;
+  color: #1a3a6b;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-bottom: 14px;
+}
+.ev-location-card.rondo .ev-schedule-pill { background: #fef3e0; color: #b87a10; }
+.ev-location-hours { font-size: 14px; color: #444; }
+.ev-location-hours li { padding: 4px 0; list-style: none; padding-left: 18px; position: relative; }
+.ev-location-hours li::before { content: '✓'; position: absolute; left: 0; color: #2a8a4a; font-weight: bold; }
+
+/* ── What to bring ────────────────────────────────────────── */
+.ev-bring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.ev-bring-group h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1a3a6b;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e0e8f4;
+}
+.ev-bring-group ul { list-style: none; }
+.ev-bring-group li {
+  font-size: 14px;
+  color: #444;
+  padding: 5px 0;
+  padding-left: 22px;
+  position: relative;
+}
+.ev-bring-group li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: #e8a020;
+  font-weight: bold;
+}
+
+/* ── SMS / contact section ────────────────────────────────── */
+.ev-sms-section {
+  background: linear-gradient(135deg, #1a3a6b, #0d2347);
+  color: #fff;
+  padding: 64px 24px;
+  text-align: center;
+}
+.ev-sms-section h2 { color: #fff; font-size: clamp(22px, 3vw, 32px); font-weight: 800; margin-bottom: 12px; }
+.ev-sms-section p { color: rgba(255,255,255,0.85); font-size: 16px; max-width: 560px; margin: 0 auto 28px; }
+.ev-sms-number {
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 900;
+  color: #e8a020;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.ev-sms-note {
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+  max-width: 500px;
+  margin: 20px auto 0;
+}
+.ev-sms-note a { color: rgba(255,255,255,0.8); text-decoration: underline; }
+
+/* ── FAQ ──────────────────────────────────────────────────── */
+.ev-faq-list { max-width: 760px; }
+.ev-faq-item {
+  border-bottom: 1px solid #e0e8f4;
+  padding: 20px 0;
+}
+.ev-faq-item:first-child { border-top: 1px solid #e0e8f4; }
+.ev-faq-q {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a3a6b;
+  margin-bottom: 8px;
+}
+.ev-faq-a { font-size: 15px; color: #555; }
+
+/* ── Footer note ──────────────────────────────────────────── */
+.ev-vita-footer-note {
+  background: #f4f7fb;
+  text-align: center;
+  padding: 32px 24px;
+  font-size: 13px;
+  color: #888;
+  border-top: 1px solid #e0e8f4;
+}
+.ev-vita-footer-note a { color: #1a3a6b; text-decoration: underline; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .ev-vita-hero { padding: 48px 16px 40px; }
+  .ev-section { padding: 48px 16px; }
+  .ev-sms-section { padding: 48px 16px; }
+}
+</style>
+
+<div class="ev-vita">
+
+  <!-- ── Hero ─────────────────────────────────────────────── -->
+  <div class="ev-vita-hero">
+    <div class="ev-vita-hero-badge">Financial Equity Services</div>
+    <h1>Free Tax Preparation<br><span>for Minnesota Residents</span></h1>
+    <p>Minnesota EquiVoice Partnership offers free, IRS-certified VITA/TCE tax preparation for individuals and families — no cost, no catch.</p>
+    <div class="ev-vita-hero-ctas">
+      <a href="https://outlook.office.com/book/MNEVPVITATCE@mnequivoicepartnership.org/" target="_blank" rel="noopener" class="ev-btn-primary">📅 Schedule an Appointment</a>
+      <a href="tel:+16513027258" class="ev-btn-outline">📞 Call (651) 302-7258</a>
+    </div>
+  </div>
+
+  <!-- ── Eligibility strip ──────────────────────────────────── -->
+  <div class="ev-vita-eligibility">
+    <strong>Who qualifies?</strong> &nbsp;Generally, individuals and families earning <strong>$67,000 or less</strong> per year — 100% free, no income-based fee.
+  </div>
+
+  <!-- ── Appointment types ──────────────────────────────────── -->
+  <div class="ev-section-alt">
+    <div class="ev-section">
+      <div class="ev-section-label">How It Works</div>
+      <h2>Choose the Appointment Format That Works for You</h2>
+      <p class="ev-section-intro">We offer three flexible ways to get your taxes prepared — all free, all IRS-certified.</p>
+      <div class="ev-appt-grid">
+        <div class="ev-appt-card">
+          <div class="ev-appt-card-body">
+            <h3>🏛️ In-Person Tax Prep</h3>
+            <p>Sit with a certified VITA volunteer who prepares and reviews your return with you. 60-minute appointment.</p>
+            <span class="ev-appt-tag">60 minutes</span>
+          </div>
+        </div>
+        <div class="ev-appt-card accent">
+          <div class="ev-appt-card-body">
+            <h3>📦 Drop-Off Intake</h3>
+            <p>Leave your documents with us — our team prepares your return and contacts you for pickup or e-signature. No long wait required.</p>
+            <span class="ev-appt-tag orange">30-minute drop-off</span>
+          </div>
+        </div>
+        <div class="ev-appt-card green">
+          <div class="ev-appt-card-body">
+            <h3>💻 Virtual Tax Prep</h3>
+            <p>Connect with a VITA volunteer by video for a fully remote tax preparation session. Available from anywhere with internet access.</p>
+            <span class="ev-appt-tag green">~60 minutes online</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Locations ──────────────────────────────────────────── -->
+  <div class="ev-section">
+    <div class="ev-section-label">Locations &amp; Schedule</div>
+    <h2>VITA Site Locations</h2>
+    <p class="ev-section-intro">Our sites are open on Saturdays during tax season. In-person and drop-off appointments available at both locations.</p>
+    <div class="ev-locations-grid">
+      <div class="ev-location-card">
+        <div class="ev-location-name">St. Paul Public Library</div>
+        <div class="ev-location-addr">Rice Street Branch &mdash; Saint Paul, MN</div>
+        <div class="ev-schedule-pill">1st &amp; 2nd Saturdays of each month</div>
+        <ul class="ev-location-hours">
+          <li>In-Person Tax Prep (60 min)</li>
+          <li>Drop-Off Intake (30 min)</li>
+          <li>Free parking available</li>
+        </ul>
+      </div>
+      <div class="ev-location-card rondo">
+        <div class="ev-location-name">Rondo Community Library</div>
+        <div class="ev-location-addr">Dale Street &mdash; Saint Paul, MN</div>
+        <div class="ev-schedule-pill">Last 2 Saturdays of each month</div>
+        <ul class="ev-location-hours">
+          <li>In-Person Tax Prep (60 min)</li>
+          <li>Drop-Off Intake (30 min)</li>
+          <li>Community meeting space</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:24px; font-size:14px; color:#777;">Virtual appointments are available any Saturday — select "Virtual Tax Prep" when scheduling online.</p>
+  </div>
+
+  <!-- ── What's covered ─────────────────────────────────────── -->
+  <div class="ev-section-alt">
+    <div class="ev-section">
+      <div class="ev-section-label">Services Included</div>
+      <h2>What's Covered — At No Cost</h2>
+      <p class="ev-section-intro">Our IRS-certified volunteers prepare federal and Minnesota state returns, including all the credits you deserve.</p>
+      <div class="ev-services-grid">
+        <div class="ev-service-card">
+          <div class="ev-service-icon">🏛️</div>
+          <div>
+            <h3>Federal Tax Return</h3>
+            <p>Form 1040, W-2 income, self-employment (Schedule C), investment income, and more.</p>
+          </div>
+        </div>
+        <div class="ev-service-card">
+          <div class="ev-service-icon">🌟</div>
+          <div>
+            <h3>Earned Income Tax Credit (EITC)</h3>
+            <p>Up to $7,830 federal credit for working families. Many eligible filers don't claim it — we make sure you do.</p>
+          </div>
+        </div>
+        <div class="ev-service-card">
+          <div class="ev-service-icon">👶</div>
+          <div>
+            <h3>Child Tax Credit</h3>
+            <p>Up to $2,000 per qualifying child, including the Additional Child Tax Credit for refundable amounts.</p>
+          </div>
+        </div>
+        <div class="ev-service-card">
+          <div class="ev-service-icon">🏠</div>
+          <div>
+            <h3>MN Property Tax Refund (M1PR)</h3>
+            <p>Minnesota renter and homeowner property tax refund — up to $2,440 for renters. Filed alongside your state return.</p>
+          </div>
+        </div>
+        <div class="ev-service-card">
+          <div class="ev-service-icon">📋</div>
+          <div>
+            <h3>Minnesota State Return</h3>
+            <p>MN Form M1, Working Family Credit, and all applicable state deductions and credits.</p>
+          </div>
+        </div>
+        <div class="ev-service-card">
+          <div class="ev-service-icon">🌍</div>
+          <div>
+            <h3>ITIN Filer Support</h3>
+            <p>We assist filers without a Social Security Number using an Individual Taxpayer Identification Number (ITIN).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── What to bring ──────────────────────────────────────── -->
+  <div class="ev-section">
+    <div class="ev-section-label">Before You Arrive</div>
+    <h2>What to Bring to Your Appointment</h2>
+    <p class="ev-section-intro">Gather these documents before your appointment to ensure a smooth, complete filing.</p>
+    <div class="ev-bring-grid">
+      <div class="ev-bring-group">
+        <h3>📋 Identity &amp; Basic Info</h3>
+        <ul>
+          <li>Photo ID (driver's license or passport)</li>
+          <li>Social Security cards or ITIN letters for everyone on your return</li>
+          <li>Date of birth for all family members</li>
+          <li>Prior year tax return (if available)</li>
+        </ul>
+      </div>
+      <div class="ev-bring-group">
+        <h3>💰 Income Documents</h3>
+        <ul>
+          <li>All W-2 forms from employers</li>
+          <li>1099 forms (self-employment, interest, dividends, SSA)</li>
+          <li>Records of any other income received</li>
+          <li>Self-employment income &amp; expense records</li>
+        </ul>
+      </div>
+      <div class="ev-bring-group">
+        <h3>🏠 For Property Tax Refund (M1PR)</h3>
+        <ul>
+          <li>Certificate of Rent Paid (CRP) from your landlord — <strong>required for renters</strong></li>
+          <li>Property Tax Statement from county — for homeowners</li>
+          <li>Total rent paid in the tax year</li>
+        </ul>
+      </div>
+      <div class="ev-bring-group">
+        <h3>🏦 Banking &amp; Other</h3>
+        <ul>
+          <li>Bank account and routing numbers for direct deposit</li>
+          <li>Health insurance coverage info (1095-A if marketplace)</li>
+          <li>Childcare provider name, address, and Tax ID</li>
+          <li>Student loan interest statements (1098-E)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SMS / Text section ─────────────────────────────────── -->
+  <div class="ev-sms-section">
+    <h2>Have Questions? Text or Call Us</h2>
+    <p>Our free AI-powered VITA assistant can answer your tax questions by text — instantly, in plain language, at no cost.</p>
+    <div class="ev-sms-number">(651) 302-7258</div>
+    <div style="display:flex; flex-wrap:wrap; gap:14px; justify-content:center; margin-top:8px;">
+      <a href="sms:+16513027258" class="ev-btn-primary">💬 Text a Tax Question</a>
+      <a href="https://outlook.office.com/book/MNEVPVITATCE@mnequivoicepartnership.org/" target="_blank" rel="noopener" class="ev-btn-outline">📅 Book an Appointment</a>
+    </div>
+    <p class="ev-sms-note">
+      By calling or texting (651) 302-7258, you consent to receive automated SMS messages from Minnesota EquiVoice Partnership, including a scheduling link sent automatically when you call. Message frequency varies. Message and data rates may apply. Reply <strong>STOP</strong> to opt out at any time. Reply <strong>HELP</strong> for help. View our <a href="/privacy-policy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>.
+    </p>
+  </div>
+
+  <!-- ── FAQ ────────────────────────────────────────────────── -->
+  <div class="ev-section">
+    <div class="ev-section-label">Common Questions</div>
+    <h2>Frequently Asked Questions</h2>
+    <div class="ev-faq-list">
+      <div class="ev-faq-item">
+        <div class="ev-faq-q">Is this really free? What's the catch?</div>
+        <div class="ev-faq-a">Completely free. VITA (Volunteer Income Tax Assistance) is an IRS-sponsored program. Our volunteers are IRS-certified and there is no fee, no upsell, and no obligation.</div>
+      </div>
+      <div class="ev-faq-item">
+        <div class="ev-faq-q">What if my situation is complicated — multiple jobs, self-employment, or I'm a student?</div>
+        <div class="ev-faq-a">Our volunteers handle W-2 income, simple self-employment (Schedule C), Social Security, unemployment, and most common situations. If your return requires a specialist (e.g., complex business returns or multiple state returns), we'll let you know at the appointment.</div>
+      </div>
+      <div class="ev-faq-item">
+        <div class="ev-faq-q">Do I need an appointment or can I walk in?</div>
+        <div class="ev-faq-a">Appointments are strongly recommended and ensure the shortest wait. Walk-ins may be accommodated based on availability. Schedule online or by texting (651) 302-7258.</div>
+      </div>
+      <div class="ev-faq-item">
+        <div class="ev-faq-q">I don't have a Social Security Number — can I still get help?</div>
+        <div class="ev-faq-a">Yes. We assist ITIN (Individual Taxpayer Identification Number) filers. Bring your ITIN letter and valid photo ID.</div>
+      </div>
+      <div class="ev-faq-item">
+        <div class="ev-faq-q">When is the deadline to file?</div>
+        <div class="ev-faq-a">The federal tax deadline is typically April 15. The MN Property Tax Refund (M1PR) can be filed from late January through August 15. If you're owed a refund, there's no penalty for filing late — but file as soon as possible to receive your money sooner.</div>
+      </div>
+      <div class="ev-faq-item">
+        <div class="ev-faq-q">What languages are available?</div>
+        <div class="ev-faq-a">We serve multilingual communities. Please contact us at (651) 302-7258 to ask about language support for your appointment.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer note ─────────────────────────────────────────── -->
+  <div class="ev-vita-footer-note">
+    Minnesota EquiVoice Partnership &bull; VITA/TCE program certified by the IRS &bull; <a href="/privacy-policy">Privacy Policy</a> &bull; <a href="/terms">Terms of Service</a><br>
+    To opt out of text messages, reply STOP to (651) 302-7258 at any time.
+  </div>
+
+</div><!-- /.ev-vita -->
+```
