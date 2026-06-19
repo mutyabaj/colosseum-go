@@ -91,17 +91,17 @@ func sendSMS(accountSID, authToken, from, to, body string) error {
 }
 
 // getOrCreateSMSSession returns an existing chat session for (phone, agentID) or creates one.
-func getOrCreateSMSSession(ctx context.Context, db *sql.DB, phone, agentID string) (string, error) {
-	var sessionID string
-	err := db.QueryRowContext(ctx,
+// isNew is true when the session was just created (first message from this number).
+func getOrCreateSMSSession(ctx context.Context, db *sql.DB, phone, agentID string) (sessionID string, isNew bool, err error) {
+	err = db.QueryRowContext(ctx,
 		`SELECT session_id FROM sms_sessions WHERE phone_number=? AND agent_id=?`,
 		phone, agentID,
 	).Scan(&sessionID)
 	if err == nil {
-		return sessionID, nil
+		return sessionID, false, nil
 	}
 	if err != sql.ErrNoRows {
-		return "", err
+		return "", false, err
 	}
 
 	// Create new chat session.
@@ -111,16 +111,22 @@ func getOrCreateSMSSession(ctx context.Context, db *sql.DB, phone, agentID strin
 		INSERT INTO chat_sessions(id,title,agent_id,status,created_at,updated_at)
 		VALUES(?,?,?,?,?,?)
 	`, sessionID, "SMS: "+phone, agentID, "active", now, now); err != nil {
-		return "", err
+		return "", false, err
 	}
 	if _, err := db.ExecContext(ctx, `
 		INSERT INTO sms_sessions(phone_number,agent_id,session_id,created_at,updated_at)
 		VALUES(?,?,?,?,?)
 	`, phone, agentID, sessionID, now, now); err != nil {
-		return "", err
+		return "", false, err
 	}
-	return sessionID, nil
+	return sessionID, true, nil
 }
+
+const smsOptInMessage = "EquiVoice VITA Tax Help: Thanks for texting! You'll receive free automated tax assistance replies. " +
+	"Msg&Data rates may apply. Reply STOP to opt out at any time, HELP for help."
+
+const smsHelpMessage = "EquiVoice VITA Tax Help: Free IRS-certified tax prep for MN residents. " +
+	"Text us your tax question or call (651) 302-7258. Reply STOP to opt out. mnequivoicepartnership.org"
 
 // waitForRunResult polls until the run completes and returns the agent's reply text.
 func waitForRunResult(ctx context.Context, db *sql.DB, runID string, timeout time.Duration) (string, error) {
@@ -289,7 +295,7 @@ func whatsappInboundHandler(db *sql.DB, workspaceRoot string) http.HandlerFunc {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			sessionID, err := getOrCreateSMSSession(ctx, db, from, wc.AgentID)
+			sessionID, _, err := getOrCreateSMSSession(ctx, db, from, wc.AgentID)
 			if err != nil {
 				log.Printf("level=ERROR msg=\"WhatsApp session error\" from=%s err=%v", from, err)
 				_ = sendWhatsApp(wc.AccountSID, wc.AuthToken, wc.FromNumber, from,
@@ -375,12 +381,25 @@ func smsInboundHandler(db *sql.DB, workspaceRoot string) http.HandlerFunc {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			sessionID, err := getOrCreateSMSSession(ctx, db, from, tc.AgentID)
+			// Handle HELP keyword before touching the session.
+			if strings.EqualFold(strings.TrimSpace(body), "HELP") {
+				_ = sendSMS(tc.AccountSID, tc.AuthToken, tc.FromNumber, from, smsHelpMessage)
+				return
+			}
+
+			sessionID, isNew, err := getOrCreateSMSSession(ctx, db, from, tc.AgentID)
 			if err != nil {
 				log.Printf("level=ERROR msg=\"SMS session error\" from=%s err=%v", from, err)
 				_ = sendSMS(tc.AccountSID, tc.AuthToken, tc.FromNumber, from,
 					"Sorry, we encountered an error. Please try again.")
 				return
+			}
+
+			// Send opt-in disclosure to first-time texters before the agent reply.
+			if isNew {
+				if err := sendSMS(tc.AccountSID, tc.AuthToken, tc.FromNumber, from, smsOptInMessage); err != nil {
+					log.Printf("level=WARN msg=\"SMS opt-in message failed\" from=%s err=%v", from, err)
+				}
 			}
 
 			runID, _, err := createRunForSessionMessage(ctx, db, workspaceRoot, sessionID, body, "queued")
