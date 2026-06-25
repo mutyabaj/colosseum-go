@@ -108,7 +108,7 @@ func vitaVoiceInboundHandler() http.HandlerFunc {
 
 		if isFederalHoliday(now) {
 			twiml(w,
-				`  <Say voice="alice">Thank you for calling Minnesota EquiVoice Partnership. `+
+				`  <Say voice="Polly.Joanna">Thank you for calling Minnesota EquiVoice Partnership. `+
 					`Our V I T A sites are closed today in observance of the holiday. `+
 					`We are open Saturdays from 9 A M to 5 P M. `+
 					`Please leave a message after the tone and a volunteer will follow up with you.</Say>`+
@@ -119,7 +119,7 @@ func vitaVoiceInboundHandler() http.HandlerFunc {
 
 		if !isVITAHours(now) {
 			twiml(w,
-				`  <Say voice="alice">Thank you for calling Minnesota EquiVoice Partnership's `+
+				`  <Say voice="Polly.Joanna">Thank you for calling Minnesota EquiVoice Partnership's `+
 					`free V I T A tax preparation service. `+
 					`Our phone lines are open Saturdays from 9 A M to 5 P M. `+
 					`A scheduling link has been sent to your phone. `+
@@ -132,8 +132,8 @@ func vitaVoiceInboundHandler() http.HandlerFunc {
 
 		twiml(w, fmt.Sprintf(
 			`  <Gather numDigits="1" action="/voice/menu" timeout="15" method="POST">`+
-				`<Say voice="alice">%s</Say></Gather>`+
-				`  <Say voice="alice">We did not receive your selection. Thank you for calling, and have a great day.</Say>`,
+				`<Say voice="Polly.Joanna">%s</Say></Gather>`+
+				`  <Say voice="Polly.Joanna">We did not receive your selection. Thank you for calling, and have a great day.</Say>`,
 			vitaMessage,
 		))
 	}
@@ -144,8 +144,8 @@ func vitaVoicePlayHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		twiml(w, fmt.Sprintf(
 			`  <Gather numDigits="1" action="/voice/menu" timeout="15" method="POST">`+
-				`<Say voice="alice">%s</Say></Gather>`+
-				`  <Say voice="alice">We did not receive your selection. Thank you for calling, and have a great day.</Say>`,
+				`<Say voice="Polly.Joanna">%s</Say></Gather>`+
+				`  <Say voice="Polly.Joanna">We did not receive your selection. Thank you for calling, and have a great day.</Say>`,
 			vitaMessage,
 		))
 	}
@@ -164,7 +164,7 @@ func vitaVoiceMenuHandler() http.HandlerFunc {
 		case "2":
 			twiml(w, `  <Redirect method="POST">/voice/voicemail</Redirect>`)
 		default:
-			twiml(w, `  <Say voice="alice">Thank you for calling. Goodbye.</Say>`)
+			twiml(w, `  <Say voice="Polly.Joanna">Thank you for calling. Goodbye.</Say>`)
 		}
 	}
 }
@@ -173,7 +173,7 @@ func vitaVoiceMenuHandler() http.HandlerFunc {
 func vitaVoiceVoicemailPromptHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		twiml(w,
-			`  <Say voice="alice">Please leave your name, phone number, and a brief message after the tone. Press the pound key when finished.</Say>`+
+			`  <Say voice="Polly.Joanna">Please leave your name, phone number, and a brief message after the tone. Press the pound key when finished.</Say>`+
 				`  <Record action="/voice/voicemail-done" maxLength="120" finishOnKey="#" playBeep="true"/>`,
 		)
 	}
@@ -204,6 +204,6 @@ func vitaVoiceVoicemailDoneHandler() http.HandlerFunc {
 			}
 		}
 
-		twiml(w, `  <Say voice="alice">Thank you for your message. Our team will follow up with you soon. Goodbye.</Say>`)
+		twiml(w, `  <Say voice="Polly.Joanna">Thank you for your message. Our team will follow up with you soon. Goodbye.</Say>`)
 	}
 }
