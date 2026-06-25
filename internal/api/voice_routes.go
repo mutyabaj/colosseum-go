@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -40,6 +41,45 @@ const vitaMessage = `Thank you for calling Minnesota EquiVoice Partnership's fre
 	`Virtual appointments and document drop-off are also available. ` +
 	`Press 1 to hear this message again, or press 2 to leave a voicemail for our team.`
 
+// isFederalHoliday reports whether t falls on a US federal holiday (America/Chicago).
+func isFederalHoliday(t time.Time) bool {
+	loc, _ := time.LoadLocation("America/Chicago")
+	ct := t.In(loc)
+	m, d, wd := ct.Month(), ct.Day(), ct.Weekday()
+	switch {
+	case m == time.January && d == 1:                                     // New Year's Day
+		return true
+	case m == time.January && wd == time.Monday && d >= 15 && d <= 21:   // MLK Day (3rd Mon)
+		return true
+	case m == time.February && wd == time.Monday && d >= 15 && d <= 21:  // Presidents Day (3rd Mon)
+		return true
+	case m == time.May && wd == time.Monday && d >= 25:                   // Memorial Day (last Mon)
+		return true
+	case m == time.June && d == 19:                                        // Juneteenth
+		return true
+	case m == time.July && d == 4:                                         // Independence Day
+		return true
+	case m == time.September && wd == time.Monday && d <= 7:              // Labor Day (1st Mon)
+		return true
+	case m == time.October && wd == time.Monday && d >= 8 && d <= 14:    // Columbus Day (2nd Mon)
+		return true
+	case m == time.November && d == 11:                                    // Veterans Day
+		return true
+	case m == time.November && wd == time.Thursday && d >= 22 && d <= 28: // Thanksgiving (4th Thu)
+		return true
+	case m == time.December && d == 25:                                    // Christmas
+		return true
+	}
+	return false
+}
+
+// isVITAHours reports whether t falls within VITA service hours: Saturday 9:00–17:00 CT.
+func isVITAHours(t time.Time) bool {
+	loc, _ := time.LoadLocation("America/Chicago")
+	ct := t.In(loc)
+	return ct.Weekday() == time.Saturday && ct.Hour() >= 9 && ct.Hour() < 17
+}
+
 // vitaVoiceInboundHandler handles the initial call: sends booking SMS then plays IVR.
 func vitaVoiceInboundHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +102,32 @@ func vitaVoiceInboundHandler() http.HandlerFunc {
 					log.Printf("level=WARN msg=\"VITA voice: failed to send booking SMS\" to=%s err=%v", from, err)
 				}
 			}
+		}
+
+		now := time.Now()
+
+		if isFederalHoliday(now) {
+			twiml(w,
+				`  <Say voice="alice">Thank you for calling Minnesota EquiVoice Partnership. `+
+					`Our V I T A sites are closed today in observance of the holiday. `+
+					`We are open Saturdays from 9 A M to 5 P M. `+
+					`Please leave a message after the tone and a volunteer will follow up with you.</Say>`+
+					`  <Record action="/voice/voicemail-done" maxLength="120" finishOnKey="#" playBeep="true"/>`,
+			)
+			return
+		}
+
+		if !isVITAHours(now) {
+			twiml(w,
+				`  <Say voice="alice">Thank you for calling Minnesota EquiVoice Partnership's `+
+					`free V I T A tax preparation service. `+
+					`Our phone lines are open Saturdays from 9 A M to 5 P M. `+
+					`A scheduling link has been sent to your phone. `+
+					`You may also visit minnesota equivoice partnership dot org to schedule a virtual appointment. `+
+					`Please leave a message after the tone and a volunteer will follow up with you.</Say>`+
+					`  <Record action="/voice/voicemail-done" maxLength="120" finishOnKey="#" playBeep="true"/>`,
+			)
+			return
 		}
 
 		twiml(w, fmt.Sprintf(
