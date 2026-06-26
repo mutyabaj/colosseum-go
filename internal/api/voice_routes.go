@@ -26,6 +26,7 @@ func registerVoiceRoutes(r chi.Router) {
 	r.Post("/voice/menu", vitaVoiceMenuHandler())
 	r.Post("/voice/voicemail", vitaVoiceVoicemailPromptHandler())
 	r.Post("/voice/voicemail-done", vitaVoiceVoicemailDoneHandler())
+	r.Post("/voice/queue-fallback", vitaVoiceQueueFallbackHandler())
 }
 
 func twiml(w http.ResponseWriter, body string) {
@@ -39,7 +40,7 @@ const vitaMessage = `Thank you for calling Minnesota EquiVoice Partnership's fre
 	`The first and second Saturdays of each month we are at Saint Paul Public Library. ` +
 	`The last two Saturdays of each month we are at Rondo Community Library. ` +
 	`Virtual appointments and document drop-off are also available. ` +
-	`Press 1 to hear this message again, or press 2 to leave a voicemail for our team.`
+	`Press 1 to hear this message again, press 2 to leave a voicemail, or press 3 to speak with a V I T A volunteer.`
 
 // isFederalHoliday reports whether t falls on a US federal holiday (America/Chicago).
 func isFederalHoliday(t time.Time) bool {
@@ -163,6 +164,12 @@ func vitaVoiceMenuHandler() http.HandlerFunc {
 			twiml(w, `  <Redirect method="POST">/voice/play</Redirect>`)
 		case "2":
 			twiml(w, `  <Redirect method="POST">/voice/voicemail</Redirect>`)
+		case "3":
+			twiml(w,
+				`  <Say voice="Polly.Joanna">Please hold while we connect you with a volunteer.</Say>`+
+					`  <Dial timeout="30" action="/voice/queue-fallback" method="POST">`+
+					`<Sip>sip:650@voice.mnequivoicepartnership.org</Sip></Dial>`,
+			)
 		default:
 			twiml(w, `  <Say voice="Polly.Joanna">Thank you for calling. Goodbye.</Say>`)
 		}
@@ -205,5 +212,16 @@ func vitaVoiceVoicemailDoneHandler() http.HandlerFunc {
 		}
 
 		twiml(w, `  <Say voice="Polly.Joanna">Thank you for your message. Our team will follow up with you soon. Goodbye.</Say>`)
+	}
+}
+
+// vitaVoiceQueueFallbackHandler handles the case where the queue SIP transfer fails or times out.
+func vitaVoiceQueueFallbackHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		twiml(w,
+			`  <Say voice="Polly.Joanna">We're sorry, all volunteers are currently unavailable. `+
+				`Please leave a message after the tone and a volunteer will follow up with you.</Say>`+
+				`  <Record action="/voice/voicemail-done" maxLength="120" finishOnKey="#" playBeep="true"/>`,
+		)
 	}
 }
