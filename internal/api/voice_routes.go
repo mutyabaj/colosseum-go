@@ -12,9 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// vitaForcedClosed, when true, overrides the schedule so all calls are treated as after-hours.
-// Reset to false on server restart.
-var vitaForcedClosed atomic.Bool
+// vitaForceCloseUntil holds a Unix timestamp; when non-zero and in the future,
+// all calls are treated as after-hours regardless of the schedule.
+// Auto-expires at midnight CT so each day starts fresh independently.
+var vitaForceCloseUntil atomic.Int64
 
 const vitaBookingURLDefault = "https://outlook.office.com/book/MNEVPVITATCE@mnequivoicepartnership.org/"
 
@@ -80,15 +81,16 @@ func isFederalHoliday(t time.Time) bool {
 	return false
 }
 
-// isVITAHours reports whether t falls within VITA service hours: Saturday 9:00–17:00 CT.
-// Returns false immediately if the queue has been manually force-closed.
+// isVITAHours reports whether t falls within VITA service hours: Sat–Sun 9:00–17:00 CT.
+// Returns false if the queue has been manually force-closed (auto-expires at midnight CT).
 func isVITAHours(t time.Time) bool {
-	if vitaForcedClosed.Load() {
+	if until := vitaForceCloseUntil.Load(); until > 0 && t.Unix() < until {
 		return false
 	}
 	loc, _ := time.LoadLocation("America/Chicago")
 	ct := t.In(loc)
-	return ct.Weekday() == time.Saturday && ct.Hour() >= 9 && ct.Hour() < 17
+	wd := ct.Weekday()
+	return (wd == time.Saturday || wd == time.Sunday) && ct.Hour() >= 9 && ct.Hour() < 17
 }
 
 // vitaVoiceInboundHandler handles the initial call: sends booking SMS then plays IVR.
@@ -235,18 +237,23 @@ func vitaQueueToggleHandler() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		loc, _ := time.LoadLocation("America/Chicago")
 		switch strings.TrimSpace(r.URL.Query().Get("state")) {
 		case "close":
-			vitaForcedClosed.Store(true)
-			fmt.Fprintln(w, "VITA queue: FORCED CLOSED — callers will hear the after-hours message.")
+			now := time.Now().In(loc)
+			midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc)
+			vitaForceCloseUntil.Store(midnight.Unix())
+			fmt.Fprintf(w, "VITA queue: FORCED CLOSED until midnight CT (%s). Opens fresh tomorrow.\n", midnight.Format("Mon Jan 2"))
 		case "open":
-			vitaForcedClosed.Store(false)
-			fmt.Fprintln(w, "VITA queue: OPEN — normal Saturday schedule resumed.")
+			vitaForceCloseUntil.Store(0)
+			fmt.Fprintln(w, "VITA queue: OPEN — normal Sat/Sun schedule resumed.")
 		default:
-			if vitaForcedClosed.Load() {
-				fmt.Fprintln(w, "VITA queue status: FORCED CLOSED")
+			until := vitaForceCloseUntil.Load()
+			if until > 0 && time.Now().Unix() < until {
+				expiry := time.Unix(until, 0).In(loc)
+				fmt.Fprintf(w, "VITA queue status: FORCED CLOSED until %s\n", expiry.Format("Mon Jan 2 12:00 AM CT"))
 			} else {
-				fmt.Fprintln(w, "VITA queue status: following normal schedule")
+				fmt.Fprintln(w, "VITA queue status: following normal Sat/Sun 9am-5pm schedule")
 			}
 		}
 	}
