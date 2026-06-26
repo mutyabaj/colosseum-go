@@ -6,10 +6,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 )
+
+// vitaForcedClosed, when true, overrides the schedule so all calls are treated as after-hours.
+// Reset to false on server restart.
+var vitaForcedClosed atomic.Bool
 
 const vitaBookingURLDefault = "https://outlook.office.com/book/MNEVPVITATCE@mnequivoicepartnership.org/"
 
@@ -27,6 +32,7 @@ func registerVoiceRoutes(r chi.Router) {
 	r.Post("/voice/voicemail", vitaVoiceVoicemailPromptHandler())
 	r.Post("/voice/voicemail-done", vitaVoiceVoicemailDoneHandler())
 	r.Post("/voice/queue-fallback", vitaVoiceQueueFallbackHandler())
+	r.Get("/voice/vita/toggle", vitaQueueToggleHandler())
 }
 
 func twiml(w http.ResponseWriter, body string) {
@@ -75,7 +81,11 @@ func isFederalHoliday(t time.Time) bool {
 }
 
 // isVITAHours reports whether t falls within VITA service hours: Saturday 9:00–17:00 CT.
+// Returns false immediately if the queue has been manually force-closed.
 func isVITAHours(t time.Time) bool {
+	if vitaForcedClosed.Load() {
+		return false
+	}
 	loc, _ := time.LoadLocation("America/Chicago")
 	ct := t.In(loc)
 	return ct.Weekday() == time.Saturday && ct.Hour() >= 9 && ct.Hour() < 17
@@ -212,6 +222,33 @@ func vitaVoiceVoicemailDoneHandler() http.HandlerFunc {
 		}
 
 		twiml(w, `  <Say voice="Polly.Joanna">Thank you for your message. Our team will follow up with you soon. Goodbye.</Say>`)
+	}
+}
+
+// vitaQueueToggleHandler lets authorized staff force-close or reopen the VITA queue.
+// GET /voice/vita/toggle?token=TOKEN&state=close|open|status
+func vitaQueueToggleHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := strings.TrimSpace(os.Getenv("VITA_TOGGLE_TOKEN"))
+		if token == "" || strings.TrimSpace(r.URL.Query().Get("token")) != token {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		switch strings.TrimSpace(r.URL.Query().Get("state")) {
+		case "close":
+			vitaForcedClosed.Store(true)
+			fmt.Fprintln(w, "VITA queue: FORCED CLOSED — callers will hear the after-hours message.")
+		case "open":
+			vitaForcedClosed.Store(false)
+			fmt.Fprintln(w, "VITA queue: OPEN — normal Saturday schedule resumed.")
+		default:
+			if vitaForcedClosed.Load() {
+				fmt.Fprintln(w, "VITA queue status: FORCED CLOSED")
+			} else {
+				fmt.Fprintln(w, "VITA queue status: following normal schedule")
+			}
+		}
 	}
 }
 
