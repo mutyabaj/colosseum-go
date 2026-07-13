@@ -156,7 +156,7 @@ func (s *Session) handleTranscript(ctx context.Context, text string) {
 		if ctx.Err() != nil {
 			return
 		}
-		// Check for transfer/voicemail intent
+		// Check for transfer/voicemail/SMS-consent intent
 		if RequestsTransfer(phrase) {
 			s.speakText(ctx, phrase)
 			time.Sleep(500 * time.Millisecond)
@@ -167,6 +167,12 @@ func (s *Session) handleTranscript(ctx context.Context, text string) {
 			s.speakText(ctx, phrase)
 			time.Sleep(500 * time.Millisecond)
 			s.redirectToVoicemail(ctx)
+			return
+		}
+		if RequestsSMSLink(phrase) {
+			s.speakText(ctx, phrase)
+			time.Sleep(500 * time.Millisecond)
+			s.redirectToSMSConsent(ctx)
 			return
 		}
 		s.speakText(ctx, phrase)
@@ -237,5 +243,12 @@ func (s *Session) transferToQueue(_ context.Context) {
 func (s *Session) redirectToVoicemail(_ context.Context) {
 	log.Printf("level=INFO msg=\"voice: redirecting to voicemail\" call=%s", s.callSID)
 	s.redirectFn(s.callSID, "/voice/voicemail")
+	s.cancel()
+}
+
+// redirectToSMSConsent hands the caller off to the A2P-compliant SMS consent IVR.
+func (s *Session) redirectToSMSConsent(_ context.Context) {
+	log.Printf("level=INFO msg=\"voice: redirecting to SMS consent\" call=%s", s.callSID)
+	s.redirectFn(s.callSID, "/voice/sms-consent")
 	s.cancel()
 }

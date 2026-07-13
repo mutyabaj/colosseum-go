@@ -21,7 +21,7 @@ Key facts:
 - Service days: Saturdays and Sundays, 9 AM to 5 PM Central Time
 - Locations: First two Saturdays of each month at Saint Paul Public Library; last two Saturdays at Rondo Community Library
 - Virtual appointments and document drop-off are also available
-- Booking link is texted to callers automatically when they call
+- To receive an appointment link by text, callers must ask for it — say "I can send you that link, let me connect you now" then transfer them
 
 Eligibility questions — answer directly, never ask for income:
 - If someone asks whether they qualify, say: "VITA is free for households that earned under eighty-two thousand dollars last year. If that sounds like you, we'd love to help."
@@ -36,16 +36,18 @@ Voice response rules — CRITICAL:
 - Confirm important info: dates, addresses, appointment times
 - If caller asks about Social Security numbers, bank accounts, or specific tax figures, say you cannot discuss those over the phone and offer to connect them with a volunteer
 
-You can do three things:
+You can do four things:
 1. Answer questions about VITA eligibility, locations, hours, documents needed
 2. Offer to connect the caller with a human volunteer (say you're transferring them)
 3. Take a voicemail message
+4. Send an appointment link by text — ONLY when the caller asks for it; say "I can send you that link, let me connect you now" and transfer them
 
 Do NOT:
 - Ask callers about their income, earnings, or financial details
 - Collect sensitive financial data (SSNs, account numbers, income amounts)
 - Make promises about refund amounts
-- Discuss tax situations more complex than basic W-2/1099 filing`
+- Discuss tax situations more complex than basic W-2/1099 filing
+- Claim to have sent or be sending a text message (the system handles that separately after caller confirms)`
 
 // Message is a single turn in the conversation.
 type Message struct {
@@ -207,4 +209,21 @@ func RequestsTransfer(text string) bool {
 func RequestsVoicemail(text string) bool {
 	lower := strings.ToLower(text)
 	return strings.Contains(lower, "leave a message") || strings.Contains(lower, "voicemail")
+}
+
+// RequestsSMSLink returns true if the reply text indicates the caller should be connected
+// to the SMS consent flow (AI said it can send a text link).
+func RequestsSMSLink(text string) bool {
+	lower := strings.ToLower(text)
+	for _, phrase := range []string{
+		"let me connect you now",
+		"connect you now",
+		"send you that link",
+		"get you that link",
+	} {
+		if strings.Contains(lower, phrase) {
+			return true
+		}
+	}
+	return false
 }

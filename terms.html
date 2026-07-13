@@ -1,0 +1,448 @@
+<!-- ============================================================
+     MN EquiVoice Partnership — SMS Terms of Service
+     Paste into WordPress > Pages > Custom HTML block
+     Page slug: /terms
+     ============================================================ -->
+
+<style>
+.ev-tos * { box-sizing: border-box; margin: 0; padding: 0; }
+.ev-tos {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #101840;
+  line-height: 1.7;
+}
+
+.ev-tos-hero {
+  background: #0B1545;
+  color: #fff;
+  padding: 56px 24px 48px;
+  text-align: center;
+}
+.ev-tos-hero-badge {
+  display: inline-block;
+  background: #B31942;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-radius: 20px;
+  margin-bottom: 18px;
+}
+.ev-tos-hero h1 {
+  font-size: clamp(26px, 4vw, 40px);
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+.ev-tos-hero p {
+  font-size: 16px;
+  opacity: 0.85;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.ev-tos-body {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 56px 24px 72px;
+}
+
+.ev-tos-meta {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e0e0ec;
+}
+
+/* ── Table of contents ───────────────────────────────────── */
+.ev-tos-toc {
+  background: #f6f6f9;
+  border: 1px solid #e0e0ec;
+  border-left: 4px solid #0B1545;
+  border-radius: 0 10px 10px 0;
+  padding: 22px 26px;
+  margin-bottom: 48px;
+}
+.ev-tos-toc h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #0B1545;
+  margin-bottom: 14px;
+}
+.ev-tos-toc ol {
+  padding-left: 20px;
+  column-count: 2;
+  column-gap: 32px;
+}
+.ev-tos-toc li {
+  font-size: 14px;
+  color: #444;
+  padding: 3px 0;
+}
+.ev-tos-toc a { color: #B31942; text-decoration: none; }
+.ev-tos-toc a:hover { text-decoration: underline; }
+
+/* ── Intro ────────────────────────────────────────────────── */
+.ev-tos-intro {
+  font-size: 16px;
+  color: #444;
+  margin-bottom: 44px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid #e0e0ec;
+}
+.ev-tos-intro p { margin-bottom: 12px; }
+
+/* ── Sections ─────────────────────────────────────────────── */
+.ev-tos-section {
+  margin-bottom: 48px;
+  scroll-margin-top: 24px;
+}
+.ev-tos-section h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0B1545;
+  margin-bottom: 16px;
+  padding-left: 14px;
+  border-left: 4px solid #B31942;
+}
+.ev-tos-section h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0B1545;
+  margin: 20px 0 10px;
+}
+.ev-tos-section p {
+  font-size: 15px;
+  color: #444;
+  margin-bottom: 12px;
+}
+.ev-tos-section ul, .ev-tos-section ol {
+  padding-left: 22px;
+  margin-bottom: 14px;
+}
+.ev-tos-section li {
+  font-size: 15px;
+  color: #444;
+  padding: 4px 0;
+}
+.ev-tos-section strong { color: #101840; }
+.ev-tos-section a { color: #B31942; }
+
+/* ── Keyword highlight ────────────────────────────────────── */
+.ev-tos-keyword {
+  display: inline-block;
+  background: #0B1545;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 3px 12px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+/* ── Highlight box ────────────────────────────────────────── */
+.ev-tos-highlight {
+  background: #f6f6f9;
+  border: 1px solid #e0e0ec;
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin: 16px 0;
+}
+.ev-tos-highlight p { margin: 0; font-size: 15px; color: #333; }
+.ev-tos-highlight strong { color: #0B1545; }
+
+/* ── Warning box ──────────────────────────────────────────── */
+.ev-tos-warning {
+  background: #fff8f9;
+  border: 1px solid #f5c6cf;
+  border-left: 4px solid #B31942;
+  border-radius: 0 10px 10px 0;
+  padding: 18px 22px;
+  margin: 16px 0;
+}
+.ev-tos-warning p { margin: 0; font-size: 15px; color: #333; }
+
+/* ── Contact box ──────────────────────────────────────────── */
+.ev-tos-contact {
+  background: #f6f6f9;
+  border: 1px solid #e0e0ec;
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-top: 12px;
+}
+.ev-tos-contact p { font-size: 15px; color: #444; margin-bottom: 6px; }
+.ev-tos-contact a { color: #B31942; font-weight: 600; }
+
+/* ── Divider ──────────────────────────────────────────────── */
+.ev-tos-divider {
+  border: none;
+  border-top: 1px solid #e0e0ec;
+  margin: 48px 0;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.ev-tos-footer {
+  background: #0B1545;
+  text-align: center;
+  padding: 28px 24px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+}
+.ev-tos-footer a { color: rgba(255,255,255,0.85); text-decoration: underline; }
+
+@media (max-width: 600px) {
+  .ev-tos-hero { padding: 40px 16px 36px; }
+  .ev-tos-body { padding: 40px 16px 56px; }
+  .ev-tos-toc ol { column-count: 1; }
+}
+</style>
+
+<div class="ev-tos">
+
+  <div class="ev-tos-hero">
+    <div class="ev-tos-hero-badge">Legal</div>
+    <h1>VITA SMS Terms of Service</h1>
+    <p>These terms govern your participation in the Minnesota EquiVoice Partnership VITA text-messaging service at (651) 302-7258.</p>
+  </div>
+
+  <div class="ev-tos-body">
+
+    <p class="ev-tos-meta">
+      <strong>Effective Date:</strong> July 13, 2026 &nbsp;&bull;&nbsp;
+      <strong>Last Updated:</strong> July 13, 2026
+    </p>
+
+    <!-- Table of Contents -->
+    <div class="ev-tos-toc">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s1">Description of the SMS Service</a></li>
+        <li><a href="#s2">How You Enroll</a></li>
+        <li><a href="#s3">Message Frequency</a></li>
+        <li><a href="#s4">Message and Data Rates</a></li>
+        <li><a href="#s5">Opting Out</a></li>
+        <li><a href="#s6">Help and Support</a></li>
+        <li><a href="#s7">Preliminary Estimates &amp; Tax Disclaimer</a></li>
+        <li><a href="#s8">Sensitive Information</a></li>
+        <li><a href="#s9">Automated &amp; AI Responses</a></li>
+        <li><a href="#s10">Availability of the Service</a></li>
+        <li><a href="#s11">Appropriate Use</a></li>
+        <li><a href="#s12">Privacy</a></li>
+        <li><a href="#s13">Consent Is Not a Condition of Service</a></li>
+        <li><a href="#s14">Changes to These Terms</a></li>
+        <li><a href="#s15">Contact Information</a></li>
+      </ol>
+    </div>
+
+    <!-- Intro -->
+    <div class="ev-tos-intro">
+      <p>These SMS Terms of Service govern your participation in the Minnesota EquiVoice Partnership VITA text-messaging service operated through <strong>(651) 302-7258</strong>.</p>
+      <p>Minnesota EquiVoice Partnership is a Minnesota 501(c)(3) nonprofit organization that provides free Volunteer Income Tax Assistance (VITA) and Tax Counseling for the Elderly (TCE) services to eligible Minnesota residents.</p>
+    </div>
+
+    <!-- 1 -->
+    <div class="ev-tos-section" id="s1">
+      <h2>1. Description of the SMS Service</h2>
+      <p>The Minnesota EquiVoice Partnership VITA SMS service provides automated, conversational assistance concerning:</p>
+      <ul>
+        <li>General federal and Minnesota tax questions;</li>
+        <li>Preliminary federal and Minnesota tax estimates;</li>
+        <li>Minnesota tax credits and refunds;</li>
+        <li>Minnesota Property Tax Refund and Renter's Credit information;</li>
+        <li>VITA eligibility and service information;</li>
+        <li>Tax-document checklists;</li>
+        <li>VITA locations and operating hours;</li>
+        <li>Appointment scheduling links; and</li>
+        <li>Follow-up information requested by the client.</li>
+      </ul>
+      <p>The automated assistant may ask questions about your tax year, filing status, household size, income source, W-2 or 1099 income, approximate income, federal withholding, Minnesota withholding, rent paid, property taxes paid, and similar information needed to provide a preliminary estimate.</p>
+      <div class="ev-tos-highlight">
+        <p>Messages are transactional and related to your tax inquiry or VITA service request. Minnesota EquiVoice Partnership does <strong>not</strong> use this program to send marketing, fundraising, advertising, or promotional messages.</p>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="ev-tos-section" id="s2">
+      <h2>2. How You Enroll</h2>
+      <p>You may consent to receive SMS messages in either of the following ways:</p>
+
+      <h3>Text-In Consent</h3>
+      <p>You may initiate the service by voluntarily texting a tax-related question or request to <strong>(651) 302-7258</strong>. By texting this number, you consent to receive automated conversational responses from Minnesota EquiVoice Partnership concerning your inquiry.</p>
+
+      <h3>Telephone Consent</h3>
+      <p>During a call to <strong>(651) 302-7258</strong>, you may request an appointment or information link by text. Before sending the message, the automated telephone system will read an SMS disclosure and ask you to press 1 or say "yes" to consent. <strong>No text message will be sent unless you provide this affirmative consent.</strong></p>
+      <div class="ev-tos-highlight">
+        <p>Calling Minnesota EquiVoice Partnership does <strong>not</strong>, by itself, enroll you in SMS messaging. The complete telephone consent script is publicly documented at <a href="/vita-sms-consent-disclosure">VITA Phone Line SMS Consent Disclosure</a>.</p>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="ev-tos-section" id="s3">
+      <h2>3. Message Frequency</h2>
+      <p>Message frequency varies according to your questions, responses, and requests.</p>
+      <p>A text-initiated tax-assistance conversation may involve multiple messages while the automated assistant asks follow-up questions and responds to your inquiry.</p>
+      <p>When you consent during a telephone call solely to receive an appointment link, you will ordinarily receive one requested message unless you reply with additional questions.</p>
+      <p>No unsolicited recurring or promotional messages are sent.</p>
+    </div>
+
+    <!-- 4 -->
+    <div class="ev-tos-section" id="s4">
+      <h2>4. Message and Data Rates</h2>
+      <p>Minnesota EquiVoice Partnership does not charge for its VITA SMS service.</p>
+      <div class="ev-tos-warning">
+        <p><strong>Message and data rates may apply</strong> according to your mobile carrier and service plan. You are responsible for any charges imposed by your carrier.</p>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="ev-tos-section" id="s5">
+      <h2>5. Opting Out</h2>
+      <p>You may stop receiving messages at any time by replying:</p>
+      <p><span class="ev-tos-keyword">STOP</span></p>
+      <p>You may also use other commonly recognized opt-out keywords, including <span class="ev-tos-keyword">CANCEL</span>, <span class="ev-tos-keyword">END</span>, <span class="ev-tos-keyword">QUIT</span>, <span class="ev-tos-keyword">UNSUBSCRIBE</span>, or <span class="ev-tos-keyword">OPT OUT</span>.</p>
+      <p>After opting out, you will receive one confirmation message. No additional messages will be sent unless you later initiate a new conversation or reply <span class="ev-tos-keyword">START</span> to resubscribe.</p>
+      <div class="ev-tos-highlight">
+        <p>Opting out of SMS messages does <strong>not</strong> prevent you from using Minnesota EquiVoice Partnership's telephone, website, in-person, or other VITA services.</p>
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="ev-tos-section" id="s6">
+      <h2>6. Help and Support</h2>
+      <p>For assistance with the SMS service, reply:</p>
+      <p><span class="ev-tos-keyword">HELP</span></p>
+      <p>You may also contact Minnesota EquiVoice Partnership directly:</p>
+      <div class="ev-tos-contact">
+        <p><strong>Minnesota EquiVoice Partnership</strong></p>
+        <p>📞 Phone or Text: <a href="tel:+16513027258">(651) 302-7258</a></p>
+        <p>✉️ Email: <a href="mailto:info@mnequivoicepartnership.org">info@mnequivoicepartnership.org</a></p>
+        <p>🌐 Website: <a href="https://mnequivoicepartnership.org">mnequivoicepartnership.org</a></p>
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="ev-tos-section" id="s7">
+      <h2>7. Preliminary Estimates and Tax Disclaimer</h2>
+      <p>Responses from the automated assistant are provided for general informational and educational purposes.</p>
+      <p>Any federal tax, Minnesota tax, credit, refund, Property Tax Refund, or Renter's Credit amount provided through SMS is a <strong>preliminary estimate</strong> based only on the information you voluntarily supply.</p>
+      <p>An estimate provided by the automated assistant:</p>
+      <ul>
+        <li>Is not a completed or filed tax return;</li>
+        <li>Is not a guarantee of a refund, credit, liability, or eligibility determination;</li>
+        <li>May not account for every tax form, deduction, credit, limitation, or special circumstance;</li>
+        <li>Does not create a tax preparer-client, attorney-client, accountant-client, or fiduciary relationship; and</li>
+        <li>Should not be relied upon as a substitute for preparation and review of your complete tax return.</li>
+      </ul>
+      <div class="ev-tos-warning">
+        <p>Actual tax results may differ materially after all income, deductions, credits, dependents, tax documents, and other relevant circumstances are reviewed. Please visit or schedule an appointment with a Minnesota EquiVoice Partnership VITA site to have your complete tax return prepared and reviewed.</p>
+      </div>
+    </div>
+
+    <!-- 8 -->
+    <div class="ev-tos-section" id="s8">
+      <h2>8. Sensitive Information</h2>
+      <p>SMS is not a secure channel for highly sensitive tax or financial information.</p>
+      <p><strong>Do not send any of the following by text message:</strong></p>
+      <ul>
+        <li>Social Security numbers;</li>
+        <li>Individual Taxpayer Identification Numbers;</li>
+        <li>Bank account or routing numbers;</li>
+        <li>Complete dates of birth;</li>
+        <li>Passwords, PINs, or account credentials;</li>
+        <li>Photographs or copies of tax documents;</li>
+        <li>Identity documents; or</li>
+        <li>Payment-card information.</li>
+      </ul>
+      <p>Minnesota EquiVoice Partnership may instruct you to use an approved secure process or attend a VITA site when sensitive information or documents are required.</p>
+    </div>
+
+    <!-- 9 -->
+    <div class="ev-tos-section" id="s9">
+      <h2>9. Automated and Artificial-Intelligence Responses</h2>
+      <p>The VITA SMS service uses automated systems, which may include artificial-intelligence technology, to interpret questions, request relevant information, and generate responses.</p>
+      <div class="ev-tos-highlight">
+        <p>Automated systems can misunderstand information, omit relevant considerations, or generate inaccurate results. You are responsible for reviewing the information provided and obtaining assistance from a qualified VITA volunteer when appropriate.</p>
+      </div>
+      <p>The web-based VITA assistant may also be available through Minnesota EquiVoice Partnership's website. Using the web assistant does not automatically enroll you in SMS messaging.</p>
+    </div>
+
+    <!-- 10 -->
+    <div class="ev-tos-section" id="s10">
+      <h2>10. Availability of the Service</h2>
+      <p>The SMS service may occasionally be unavailable because of maintenance, telecommunications failures, carrier filtering, Internet outages, third-party service interruptions, or circumstances beyond Minnesota EquiVoice Partnership's control.</p>
+      <p>Wireless carriers are not liable for delayed or undelivered messages. Minnesota EquiVoice Partnership does not guarantee that every message will be received, delivered, processed, or answered within a particular period.</p>
+      <div class="ev-tos-highlight">
+        <p>For urgent assistance, call <strong>(651) 302-7258</strong> or visit a Minnesota EquiVoice Partnership VITA location.</p>
+      </div>
+    </div>
+
+    <!-- 11 -->
+    <div class="ev-tos-section" id="s11">
+      <h2>11. Appropriate Use</h2>
+      <p>You agree not to use the SMS service to:</p>
+      <ul>
+        <li>Violate any law or regulation;</li>
+        <li>Submit fraudulent, deceptive, threatening, or abusive content;</li>
+        <li>Interfere with the operation or security of the service;</li>
+        <li>Attempt unauthorized access to systems or information;</li>
+        <li>Send malicious code or automated traffic; or</li>
+        <li>Impersonate another individual.</li>
+      </ul>
+      <p>Minnesota EquiVoice Partnership may restrict or suspend access when it reasonably believes the service is being misused or its systems, staff, volunteers, or clients are at risk.</p>
+    </div>
+
+    <!-- 12 -->
+    <div class="ev-tos-section" id="s12">
+      <h2>12. Privacy</h2>
+      <p>Your use of the SMS service is subject to the Minnesota EquiVoice Partnership <a href="/privacy-policy">Privacy Policy</a>.</p>
+      <div class="ev-tos-highlight">
+        <p>Mobile telephone numbers, SMS opt-in information, and messaging consent information are <strong>not</strong> sold, rented, or shared with third parties or affiliates for marketing or promotional purposes. All the above categories exclude text messaging originator opt-in data and consent; this information will not be shared with any third parties.</p>
+      </div>
+      <p>Technology service providers may process information only as necessary to operate, maintain, secure, and support the SMS service, as further described in the Privacy Policy.</p>
+    </div>
+
+    <!-- 13 -->
+    <div class="ev-tos-section" id="s13">
+      <h2>13. Consent Is Not a Condition of Service</h2>
+      <div class="ev-tos-highlight">
+        <p>Consent to receive text messages is <strong>voluntary</strong> and is <strong>not a condition</strong> of receiving free VITA services.</p>
+      </div>
+      <p>You may obtain VITA assistance through other available channels, including telephone, online scheduling, in-person service, document drop-off, or approved virtual-service methods.</p>
+    </div>
+
+    <!-- 14 -->
+    <div class="ev-tos-section" id="s14">
+      <h2>14. Changes to These Terms</h2>
+      <p>Minnesota EquiVoice Partnership may update these SMS Terms of Service periodically. When these Terms are revised, the "Last Updated" date at the top of this page will be changed. Material changes affecting the messaging program may also be communicated through the website or SMS service when appropriate.</p>
+      <p>Continued use of the SMS service after revised Terms are posted constitutes acceptance of the updated Terms.</p>
+    </div>
+
+    <!-- 15 -->
+    <div class="ev-tos-section" id="s15">
+      <h2>15. Contact Information</h2>
+      <p>Questions about these SMS Terms of Service may be directed to:</p>
+      <div class="ev-tos-contact">
+        <p><strong>Minnesota EquiVoice Partnership</strong></p>
+        <p>📞 Phone or Text: <a href="tel:+16513027258">(651) 302-7258</a></p>
+        <p>✉️ Email: <a href="mailto:info@mnequivoicepartnership.org">info@mnequivoicepartnership.org</a></p>
+        <p>🌐 Website: <a href="https://mnequivoicepartnership.org">mnequivoicepartnership.org</a></p>
+        <p>✉️ To opt out of text messages, reply <strong>STOP</strong> to (651) 302-7258 at any time.</p>
+      </div>
+    </div>
+
+  </div><!-- /.ev-tos-body -->
+
+  <div class="ev-tos-footer">
+    Minnesota EquiVoice Partnership &bull; 501(c)(3) Nonprofit &bull;
+    <a href="/vita-tce-services">VITA/TCE Services</a> &bull;
+    <a href="/privacy-policy">Privacy Policy</a> &bull;
+    <a href="tel:+16513027258">(651) 302-7258</a><br>
+    To opt out of text messages, reply STOP to (651) 302-7258 at any time.
+  </div>
+
+</div><!-- /.ev-tos -->
