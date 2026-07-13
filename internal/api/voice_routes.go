@@ -228,7 +228,8 @@ func vitaVoiceSMSConsentHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		twiml(w,
 			`  <Gather numDigits="1" input="dtmf speech" hints="yes, no" action="/voice/sms-consent-response" timeout="10" method="POST">`+
-				`<Say voice="Polly.Joanna">Would you like Minnesota EquiVoice Partnership V I T A to text the appointment link `+
+				`<Say voice="Polly.Joanna">Would you like Minnesota EquiVoice Partnership V I T A `+
+				`to send one automated text message containing the appointment scheduling link `+
 				`to the number you are calling from? `+
 				`Message and data rates may apply. Reply S T O P to opt out or H E L P for help. `+
 				`Press 1 or say yes to agree. Press 2 or say no to continue without a text.</Say>`+
