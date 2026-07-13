@@ -30,10 +30,14 @@ func registerVoiceRoutes(r chi.Router) {
 	r.Post("/voice/inbound", vitaVoiceInboundHandler())
 	r.Post("/voice/play", vitaVoicePlayHandler())
 	r.Post("/voice/menu", vitaVoiceMenuHandler())
+	r.Post("/voice/transfer", vitaVoiceTransferHandler())
 	r.Post("/voice/voicemail", vitaVoiceVoicemailPromptHandler())
 	r.Post("/voice/voicemail-done", vitaVoiceVoicemailDoneHandler())
 	r.Post("/voice/queue-fallback", vitaVoiceQueueFallbackHandler())
 	r.Get("/voice/vita/toggle", vitaQueueToggleHandler())
+	// AI voice stream routes
+	r.Post("/voice/stream", vitaStreamTwiMLHandler())
+	r.Get("/voice/stream/ws", vitaStreamWSHandler())
 }
 
 func twiml(w http.ResponseWriter, body string) {
@@ -119,6 +123,19 @@ func vitaVoiceInboundHandler() http.HandlerFunc {
 
 		now := time.Now()
 
+		// AI path: when enabled and during VITA hours, hand off to Media Stream
+		if vitaAIEnabled.Load() && isVITAHours(now) {
+			twiml(w, fmt.Sprintf(
+				`  <Connect>`+
+					`<Stream url="%s" track="inbound_track"/>`+
+					`</Connect>`+
+					`  <Say voice="Polly.Joanna">I'm having trouble with our assistant. Let me take you to our regular menu.</Say>`+
+					`  <Redirect method="POST">/voice/play</Redirect>`,
+				streamWSURL(r),
+			))
+			return
+		}
+
 		if isFederalHoliday(now) {
 			twiml(w,
 				`  <Say voice="Polly.Joanna">Thank you for calling Minnesota EquiVoice Partnership. `+
@@ -188,6 +205,18 @@ func vitaVoiceMenuHandler() http.HandlerFunc {
 	}
 }
 
+// vitaVoiceTransferHandler directly connects the caller to the volunteer SIP queue.
+// Used by the AI session when the caller requests a human — avoids relying on POST body params.
+func vitaVoiceTransferHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		twiml(w,
+			`  <Say voice="Polly.Joanna">Please hold while we connect you with a volunteer.</Say>`+
+				`  <Dial timeout="30" action="/voice/queue-fallback" method="POST">`+
+				`<Sip>sip:650@voice.mnequivoicepartnership.org</Sip></Dial>`,
+		)
+	}
+}
+
 // vitaVoiceVoicemailPromptHandler plays the voicemail prompt and starts recording.
 func vitaVoiceVoicemailPromptHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -247,6 +276,12 @@ func vitaQueueToggleHandler() http.HandlerFunc {
 		case "open":
 			vitaForceCloseUntil.Store(0)
 			fmt.Fprintln(w, "VITA queue: OPEN — normal Sat/Sun schedule resumed.")
+		case "ai-on":
+			vitaAIEnabled.Store(true)
+			fmt.Fprintln(w, "VITA AI voice: ENABLED — callers will reach the AI assistant during VITA hours.")
+		case "ai-off":
+			vitaAIEnabled.Store(false)
+			fmt.Fprintln(w, "VITA AI voice: DISABLED — callers will reach the standard IVR menu.")
 		default:
 			until := vitaForceCloseUntil.Load()
 			if until > 0 && time.Now().Unix() < until {
@@ -254,6 +289,11 @@ func vitaQueueToggleHandler() http.HandlerFunc {
 				fmt.Fprintf(w, "VITA queue status: FORCED CLOSED until %s\n", expiry.Format("Mon Jan 2 12:00 AM CT"))
 			} else {
 				fmt.Fprintln(w, "VITA queue status: following normal Sat/Sun 9am-5pm schedule")
+			}
+			if vitaAIEnabled.Load() {
+				fmt.Fprintln(w, "VITA AI voice: ENABLED")
+			} else {
+				fmt.Fprintln(w, "VITA AI voice: DISABLED (IVR fallback active)")
 			}
 		}
 	}

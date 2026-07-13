@@ -25,7 +25,7 @@ lint-ui:
 check: lint test ui-build
 
 run:
-	go run ./cmd/colosseum server
+	go run -tags dev ./cmd/colosseum server
 
 ui-install:
 	npm --prefix ui install
@@ -37,7 +37,7 @@ ui-build:
 	cp -r ui/dist/. internal/api/ui/dist/
 
 dev:
-	( go run ./cmd/colosseum server & trap 'kill $$!' INT TERM EXIT; npm --prefix ui run dev )
+	( go run -tags dev ./cmd/colosseum server & trap 'kill $$!' INT TERM EXIT; npm --prefix ui run dev )
 
 tidy:
 	go mod tidy
