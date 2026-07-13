@@ -1,0 +1,320 @@
+<!-- ============================================================
+     MN EquiVoice Partnership — IVR SMS Consent Script
+     Paste into WordPress > Pages > Custom HTML block
+     Suggested page slug: /vita-sms-consent-disclosure
+     Referenced in the A2P 10DLC campaign submission as public
+     evidence of the telephone SMS consent flow.
+     ============================================================ -->
+
+<style>
+.ev-ivr * { box-sizing: border-box; margin: 0; padding: 0; }
+.ev-ivr {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #1a1a2e;
+  line-height: 1.7;
+  background: #f2f4f7;
+}
+
+.ev-ivr-hero {
+  background: #0d1b35;
+  color: #fff;
+  padding: 56px 24px 48px;
+  text-align: center;
+}
+.ev-ivr-hero-badge {
+  display: inline-block;
+  background: #b8233b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-radius: 20px;
+  margin-bottom: 18px;
+}
+.ev-ivr-hero h1 {
+  font-size: clamp(24px, 4vw, 38px);
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+.ev-ivr-hero p {
+  font-size: 16px;
+  opacity: 0.85;
+  max-width: 580px;
+  margin: 0 auto;
+}
+
+.ev-ivr-body {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 56px 24px 72px;
+}
+
+.ev-ivr-updated {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #dde3ed;
+}
+
+.ev-ivr-section {
+  margin-bottom: 44px;
+}
+.ev-ivr-section h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0d1b35;
+  margin-bottom: 14px;
+  padding-left: 14px;
+  border-left: 4px solid #b8233b;
+}
+.ev-ivr-section p {
+  font-size: 15px;
+  color: #444;
+  margin-bottom: 12px;
+}
+.ev-ivr-section ul, .ev-ivr-section ol {
+  padding-left: 20px;
+  margin-bottom: 12px;
+}
+.ev-ivr-section li {
+  font-size: 15px;
+  color: #444;
+  padding: 4px 0;
+}
+.ev-ivr-section a { color: #b8233b; }
+.ev-ivr-section strong { color: #1a1a2e; }
+
+.ev-ivr-script {
+  background: #fff;
+  border: 1px solid #dde3ed;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 16px 0;
+}
+.ev-ivr-script-header {
+  background: #0d1b35;
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.ev-ivr-script-body {
+  padding: 18px 20px;
+}
+.ev-ivr-script-line {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: flex-start;
+}
+.ev-ivr-script-line:last-child { margin-bottom: 0; }
+.ev-ivr-script-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  min-width: 56px;
+  padding-top: 3px;
+  color: #888;
+}
+.ev-ivr-script-label.system { color: #0d1b35; }
+.ev-ivr-script-label.sms    { color: #b8233b; }
+.ev-ivr-script-text {
+  font-size: 15px;
+  color: #222;
+  background: #f2f4f7;
+  border: 1px solid #dde3ed;
+  border-radius: 8px;
+  padding: 10px 14px;
+  flex: 1;
+}
+.ev-ivr-script-text.consent-key {
+  border-color: #b8233b;
+  background: #fdf2f4;
+}
+
+.ev-ivr-highlight {
+  background: #fff;
+  border: 1px solid #dde3ed;
+  border-left: 4px solid #b8233b;
+  border-radius: 0 8px 8px 0;
+  padding: 16px 20px;
+  margin: 16px 0;
+  font-size: 15px;
+  color: #333;
+}
+
+.ev-ivr-footer {
+  background: #0d1b35;
+  color: rgba(255,255,255,0.7);
+  text-align: center;
+  padding: 28px 24px;
+  font-size: 13px;
+}
+.ev-ivr-footer a { color: rgba(255,255,255,0.85); text-decoration: underline; }
+
+@media (max-width: 600px) {
+  .ev-ivr-hero { padding: 40px 16px 36px; }
+  .ev-ivr-body { padding: 40px 16px 56px; }
+  .ev-ivr-script-label { min-width: 44px; font-size: 10px; }
+}
+</style>
+
+<div class="ev-ivr">
+
+  <div class="ev-ivr-hero">
+    <div class="ev-ivr-hero-badge">Disclosure</div>
+    <h1>VITA Phone Line — SMS Consent Disclosure</h1>
+    <p>This page documents the automated voice script used to obtain caller consent before sending any text message from Minnesota EquiVoice Partnership's free VITA tax-assistance line at (651) 302-7258.</p>
+  </div>
+
+  <div class="ev-ivr-body">
+
+    <p class="ev-ivr-updated"><strong>Effective Date:</strong> July 13, 2026 &nbsp;&bull;&nbsp; <strong>Phone:</strong> (651) 302-7258</p>
+
+    <!-- 1. Overview -->
+    <div class="ev-ivr-section">
+      <h2>1. Overview</h2>
+      <p>When a caller dials <strong>(651) 302-7258</strong>, they reach Minnesota EquiVoice Partnership's free VITA automated phone service. The automated system <strong>never sends a text message without the caller's explicit, affirmative consent</strong>.</p>
+      <p>At any point during the call — whether during VITA service hours (Saturday–Sunday, 9 AM to 5 PM Central) or outside of those hours — callers may choose to receive an appointment scheduling link by text. Before any SMS is sent, the system reads the full consent disclosure in Section 4 and requires a keypress or verbal "yes."</p>
+    </div>
+
+    <!-- 2. Main IVR Menu -->
+    <div class="ev-ivr-section">
+      <h2>2. Main IVR Script — During VITA Hours</h2>
+      <p>Callers who reach the line during VITA service hours hear the following menu:</p>
+      <div class="ev-ivr-script">
+        <div class="ev-ivr-script-header">&#128222; Automated Voice System — Main Menu</div>
+        <div class="ev-ivr-script-body">
+          <div class="ev-ivr-script-line">
+            <span class="ev-ivr-script-label system">System</span>
+            <span class="ev-ivr-script-text">Thank you for calling Minnesota EquiVoice Partnership's free V-I-T-A tax preparation service. Our sites are open on Saturdays. The first and second Saturdays of each month we are at Saint Paul Public Library; the last two Saturdays at Rondo Community Library. Virtual appointments and document drop-off are also available. Press 1 to hear this message again, press 2 to leave a voicemail, press 3 to speak with a VITA volunteer, or press 4 to receive an appointment link by text.</span>
+          </div>
+        </div>
+      </div>
+      <p>If the caller presses <strong>4</strong>, the system proceeds to the SMS Consent Disclosure in Section 4.</p>
+    </div>
+
+    <!-- 3. After-Hours / Holiday -->
+    <div class="ev-ivr-section">
+      <h2>3. After-Hours and Holiday Script</h2>
+      <p>Callers who reach the line outside of VITA service hours or on a federal holiday hear one of the following messages:</p>
+
+      <div class="ev-ivr-script">
+        <div class="ev-ivr-script-header">&#128222; After-Hours Message</div>
+        <div class="ev-ivr-script-body">
+          <div class="ev-ivr-script-line">
+            <span class="ev-ivr-script-label system">System</span>
+            <span class="ev-ivr-script-text">Thank you for calling Minnesota EquiVoice Partnership's free V-I-T-A tax preparation service. Our phone lines are open Saturdays from 9 AM to 5 PM. You may also visit mnequivoicepartnership.org to schedule online. Press 1 to leave a voicemail, or press 2 to receive an appointment link by text.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ev-ivr-script">
+        <div class="ev-ivr-script-header">&#128222; Holiday Message</div>
+        <div class="ev-ivr-script-body">
+          <div class="ev-ivr-script-line">
+            <span class="ev-ivr-script-label system">System</span>
+            <span class="ev-ivr-script-text">Thank you for calling Minnesota EquiVoice Partnership. Our V-I-T-A sites are closed today in observance of the holiday. We are open Saturdays from 9 AM to 5 PM. Press 1 to leave a voicemail, or press 2 to receive an appointment link by text.</span>
+          </div>
+        </div>
+      </div>
+
+      <p>If the caller presses <strong>2</strong>, the system proceeds to the SMS Consent Disclosure in Section 4.</p>
+    </div>
+
+    <!-- 4. Consent Disclosure (verbatim) -->
+    <div class="ev-ivr-section">
+      <h2>4. SMS Consent Disclosure — Verbatim Script</h2>
+      <p>Before any appointment link is sent by text, the automated system reads the following disclosure in full and waits for an affirmative response:</p>
+
+      <div class="ev-ivr-script">
+        <div class="ev-ivr-script-header">&#128222; Consent Disclosure (read verbatim by the system)</div>
+        <div class="ev-ivr-script-body">
+          <div class="ev-ivr-script-line">
+            <span class="ev-ivr-script-label system">System</span>
+            <span class="ev-ivr-script-text consent-key">"Would you like Minnesota EquiVoice Partnership VITA to text the appointment link to the number you are calling from? Message and data rates may apply. Reply STOP to opt out or HELP for help. Press 1 or say yes to agree. Press 2 or say no to continue without a text."</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ev-ivr-highlight">
+        <strong>Affirmative consent is required.</strong> The system accepts either a keypress of <strong>1</strong> or the spoken word <strong>"yes."</strong> No text message is sent unless one of these responses is received. If no response is received within 10 seconds, the caller is returned to the main menu and no message is sent.
+      </div>
+    </div>
+
+    <!-- 5. Response Handling -->
+    <div class="ev-ivr-section">
+      <h2>5. What Happens After the Caller Responds</h2>
+
+      <p><strong>If the caller presses 1 or says "yes":</strong></p>
+      <div class="ev-ivr-script">
+        <div class="ev-ivr-script-header">&#128222; Consent Accepted</div>
+        <div class="ev-ivr-script-body">
+          <div class="ev-ivr-script-line">
+            <span class="ev-ivr-script-label system">System</span>
+            <span class="ev-ivr-script-text">The appointment link has been sent to your phone.</span>
+          </div>
+        </div>
+      </div>
+      <p>One SMS is sent to the caller's number containing the VITA appointment scheduling link and STOP/HELP instructions (see Section 7).</p>
+
+      <p><strong>If the caller presses 2, says "no," or does not respond within 10 seconds:</strong></p>
+      <p>No SMS is sent. The caller is returned to the main menu.</p>
+    </div>
+
+    <!-- 6. Audit Logging -->
+    <div class="ev-ivr-section">
+      <h2>6. Consent Audit Log</h2>
+      <p>Every consent interaction is recorded automatically. Each record includes:</p>
+      <ul>
+        <li>Twilio Call SID (unique call identifier)</li>
+        <li>Caller's phone number</li>
+        <li>Whether consent was given</li>
+        <li>Method of response (keypress or speech recognition)</li>
+        <li>The raw response received</li>
+        <li>Date and time of the consent decision (UTC)</li>
+      </ul>
+      <p>Records are retained as evidence of consent in accordance with CTIA guidelines and carrier A2P 10DLC requirements.</p>
+    </div>
+
+    <!-- 7. SMS Message Content -->
+    <div class="ev-ivr-section">
+      <h2>7. SMS Message Sent After Consent</h2>
+      <p>After affirmative consent, the caller receives exactly one text message:</p>
+      <div class="ev-ivr-script">
+        <div class="ev-ivr-script-header">&#128241; Text Message Sent to Caller</div>
+        <div class="ev-ivr-script-body">
+          <div class="ev-ivr-script-line">
+            <span class="ev-ivr-script-label sms">SMS</span>
+            <span class="ev-ivr-script-text">Minnesota EquiVoice Partnership VITA: Here is the free VITA tax-preparation appointment information you requested: [appointment URL]. Saturdays at St. Paul Public Library (1st &amp; 2nd Sat) or Rondo Community Library (last 2 Sat). Virtual &amp; drop-off also available. Msg &amp; data rates may apply. Reply HELP for help or STOP to opt out.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. Related Policies -->
+    <div class="ev-ivr-section">
+      <h2>8. Related Policies</h2>
+      <ul>
+        <li><a href="/privacy-policy/">Privacy Policy</a> — including the full SMS Privacy Policy section</li>
+        <li><a href="/terms/">SMS Terms of Service</a></li>
+      </ul>
+      <p>For questions about this disclosure, contact us at <a href="mailto:info@mnequivoicepartnership.org">info@mnequivoicepartnership.org</a> or call (651) 302-7258.</p>
+    </div>
+
+  </div><!-- /.ev-ivr-body -->
+
+  <div class="ev-ivr-footer">
+    Minnesota EquiVoice Partnership &bull; 501(c)(3) Nonprofit &bull;
+    <a href="/privacy-policy/">Privacy Policy</a> &bull;
+    <a href="/terms/">Terms of Service</a> &bull;
+    <a href="tel:+16513027258">(651) 302-7258</a><br>
+    To opt out of text messages at any time, reply STOP to (651) 302-7258.
+  </div>
+
+</div><!-- /.ev-ivr -->
