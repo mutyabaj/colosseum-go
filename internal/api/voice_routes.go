@@ -39,7 +39,10 @@ func registerVoiceRoutes(r chi.Router, db *sql.DB) {
 	r.Post("/voice/inbound", vitaVoiceInboundHandler())
 	r.Post("/voice/play", vitaVoicePlayHandler())
 	r.Post("/voice/menu", vitaVoiceMenuHandler())
+	r.Post("/voice/after-hours-menu", vitaVoiceAfterHoursMenuHandler())
 	r.Post("/voice/transfer", vitaVoiceTransferHandler())
+	r.Post("/voice/sms-consent", vitaVoiceSMSConsentHandler())
+	r.Post("/voice/sms-consent-response", vitaVoiceSMSConsentResponseHandler(db))
 	r.Post("/voice/voicemail", vitaVoiceVoicemailPromptHandler())
 	r.Post("/voice/voicemail-done", vitaVoiceVoicemailDoneHandler())
 	r.Post("/voice/queue-fallback", vitaVoiceQueueFallbackHandler())
@@ -55,12 +58,12 @@ func twiml(w http.ResponseWriter, body string) {
 }
 
 const vitaMessage = `Thank you for calling Minnesota EquiVoice Partnership's free V I T A tax preparation service. ` +
-	`We have just sent a scheduling link to your phone. ` +
 	`Our sites are open on Saturdays. ` +
 	`The first and second Saturdays of each month we are at Saint Paul Public Library. ` +
 	`The last two Saturdays of each month we are at Rondo Community Library. ` +
 	`Virtual appointments and document drop-off are also available. ` +
-	`Press 1 to hear this message again, press 2 to leave a voicemail, or press 3 to speak with a V I T A volunteer.`
+	`Press 1 to hear this message again, press 2 to leave a voicemail, press 3 to speak with a V I T A volunteer, ` +
+	`or press 4 to receive an appointment link by text.`
 
 // isFederalHoliday reports whether t falls on a US federal holiday (America/Chicago).
 func isFederalHoliday(t time.Time) bool {
@@ -106,28 +109,13 @@ func isVITAHours(t time.Time) bool {
 	return (wd == time.Saturday || wd == time.Sunday) && ct.Hour() >= 9 && ct.Hour() < 17
 }
 
-// vitaVoiceInboundHandler handles the initial call: sends booking SMS then plays IVR.
+// vitaVoiceInboundHandler handles the initial call and plays the IVR.
+// SMS is only sent after explicit caller consent via /voice/sms-consent.
 func vitaVoiceInboundHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
-		}
-
-		from := strings.TrimSpace(r.FormValue("From"))
-		if from != "" {
-			tc := loadTwilioConfig()
-			if tc.AccountSID != "" && tc.AuthToken != "" && tc.FromNumber != "" {
-				smsBody := fmt.Sprintf(
-					"EquiVoice free VITA tax prep — schedule your appointment:\n%s\n\n"+
-						"Saturdays at St. Paul Public Library (1st & 2nd Sat) or Rondo Community Library (last 2 Sat). "+
-						"Virtual & drop-off also available.",
-					vitaBookingURL(),
-				)
-				if err := sendSMS(tc.AccountSID, tc.AuthToken, tc.FromNumber, from, smsBody); err != nil {
-					log.Printf("level=WARN msg=\"VITA voice: failed to send booking SMS\" to=%s err=%v", from, err)
-				}
-			}
 		}
 
 		now := time.Now()
@@ -147,24 +135,27 @@ func vitaVoiceInboundHandler() http.HandlerFunc {
 
 		if isFederalHoliday(now) {
 			twiml(w,
-				`  <Say voice="Polly.Joanna">Thank you for calling Minnesota EquiVoice Partnership. `+
+				`  <Gather numDigits="1" action="/voice/after-hours-menu" timeout="10" method="POST">`+
+					`<Say voice="Polly.Joanna">Thank you for calling Minnesota EquiVoice Partnership. `+
 					`Our V I T A sites are closed today in observance of the holiday. `+
 					`We are open Saturdays from 9 A M to 5 P M. `+
-					`Please leave a message after the tone and a volunteer will follow up with you.</Say>`+
-					`  <Record action="/voice/voicemail-done" maxLength="120" finishOnKey="#" playBeep="true"/>`,
+					`Press 1 to leave a voicemail, or press 2 to receive an appointment link by text.</Say>`+
+					`</Gather>`+
+					`  <Redirect method="POST">/voice/voicemail</Redirect>`,
 			)
 			return
 		}
 
 		if !isVITAHours(now) {
 			twiml(w,
-				`  <Say voice="Polly.Joanna">Thank you for calling Minnesota EquiVoice Partnership's `+
+				`  <Gather numDigits="1" action="/voice/after-hours-menu" timeout="10" method="POST">`+
+					`<Say voice="Polly.Joanna">Thank you for calling Minnesota EquiVoice Partnership's `+
 					`free V I T A tax preparation service. `+
 					`Our phone lines are open Saturdays from 9 A M to 5 P M. `+
-					`A scheduling link has been sent to your phone. `+
-					`You may also visit minnesota equivoice partnership dot org to schedule a virtual appointment. `+
-					`Please leave a message after the tone and a volunteer will follow up with you.</Say>`+
-					`  <Record action="/voice/voicemail-done" maxLength="120" finishOnKey="#" playBeep="true"/>`,
+					`You may also visit minnesota equivoice partnership dot org to schedule online. `+
+					`Press 1 to leave a voicemail, or press 2 to receive an appointment link by text.</Say>`+
+					`</Gather>`+
+					`  <Redirect method="POST">/voice/voicemail</Redirect>`,
 			)
 			return
 		}
@@ -208,10 +199,109 @@ func vitaVoiceMenuHandler() http.HandlerFunc {
 					`  <Dial timeout="30" action="/voice/queue-fallback" method="POST">`+
 					`<Sip>sip:650@voice.mnequivoicepartnership.org</Sip></Dial>`,
 			)
+		case "4":
+			twiml(w, `  <Redirect method="POST">/voice/sms-consent</Redirect>`)
 		default:
 			twiml(w, `  <Say voice="Polly.Joanna">Thank you for calling. Goodbye.</Say>`)
 		}
 	}
+}
+
+// vitaVoiceAfterHoursMenuHandler handles digit presses from the after-hours / holiday message.
+func vitaVoiceAfterHoursMenuHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		switch strings.TrimSpace(r.FormValue("Digits")) {
+		case "2":
+			twiml(w, `  <Redirect method="POST">/voice/sms-consent</Redirect>`)
+		default:
+			twiml(w, `  <Redirect method="POST">/voice/voicemail</Redirect>`)
+		}
+	}
+}
+
+// vitaVoiceSMSConsentHandler plays the A2P-compliant consent disclosure and gathers the caller's response.
+func vitaVoiceSMSConsentHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		twiml(w,
+			`  <Gather numDigits="1" input="dtmf speech" hints="yes, no" action="/voice/sms-consent-response" timeout="10" method="POST">`+
+				`<Say voice="Polly.Joanna">Would you like Minnesota EquiVoice Partnership V I T A to text the appointment link `+
+				`to the number you are calling from? `+
+				`Message and data rates may apply. Reply S T O P to opt out or H E L P for help. `+
+				`Press 1 or say yes to agree. Press 2 or say no to continue without a text.</Say>`+
+				`</Gather>`+
+				`  <Say voice="Polly.Joanna">We did not receive your selection. Returning to the main menu.</Say>`+
+				`  <Redirect method="POST">/voice/play</Redirect>`,
+		)
+	}
+}
+
+// vitaVoiceSMSConsentResponseHandler records the caller's consent decision and sends the SMS if agreed.
+func vitaVoiceSMSConsentResponseHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		from := strings.TrimSpace(r.FormValue("From"))
+		callSID := strings.TrimSpace(r.FormValue("CallSid"))
+		digits := strings.TrimSpace(r.FormValue("Digits"))
+		speech := strings.ToLower(strings.TrimSpace(r.FormValue("SpeechResult")))
+
+		consented := digits == "1" || strings.Contains(speech, "yes")
+		method := "dtmf"
+		if digits == "" && speech != "" {
+			method = "speech"
+		}
+		response := digits
+		if response == "" {
+			response = speech
+		}
+
+		_, err := db.Exec(
+			`INSERT INTO sms_consent_log(call_sid,phone_number,consented,consent_method,consent_response,consented_at)
+			 VALUES(?,?,?,?,?,?)`,
+			callSID, from, boolToInt(consented), method, response,
+			time.Now().UTC().Format(time.RFC3339),
+		)
+		if err != nil {
+			log.Printf("level=WARN msg=\"sms consent: log failed\" call=%s err=%v", callSID, err)
+		}
+
+		if consented && from != "" {
+			tc := loadTwilioConfig()
+			if tc.AccountSID != "" && tc.AuthToken != "" && tc.FromNumber != "" {
+				smsBody := fmt.Sprintf(
+					"Minnesota EquiVoice Partnership VITA: Here is the free VITA tax-preparation appointment "+
+						"information you requested: %s\n\n"+
+						"Saturdays at St. Paul Public Library (1st & 2nd Sat) or Rondo Community Library (last 2 Sat). "+
+						"Virtual & drop-off also available. Msg & data rates may apply. Reply HELP for help or STOP to opt out.",
+					vitaBookingURL(),
+				)
+				if err := sendSMS(tc.AccountSID, tc.AuthToken, tc.FromNumber, from, smsBody); err != nil {
+					log.Printf("level=WARN msg=\"sms consent: send failed\" call=%s to=%s err=%v", callSID, from, err)
+				}
+			}
+			twiml(w,
+				`  <Say voice="Polly.Joanna">The appointment link has been sent to your phone.</Say>`+
+					`  <Redirect method="POST">/voice/play</Redirect>`,
+			)
+			return
+		}
+
+		twiml(w, `  <Redirect method="POST">/voice/play</Redirect>`)
+	}
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // vitaVoiceTransferHandler directly connects the caller to the volunteer SIP queue.
