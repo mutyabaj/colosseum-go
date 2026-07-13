@@ -173,7 +173,7 @@ func registerAPIRoutes(
 	r.Post("/whatsapp/inbound", whatsappInboundHandler(db, workspaceRoot))
 
 	// Twilio Voice webhook — VITA IVR with auto-SMS booking link
-	registerVoiceRoutes(r)
+	registerVoiceRoutes(r, db)
 
 	// MCP server management
 	registerMCPRoutes(r, db)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,7 +27,15 @@ func vitaBookingURL() string {
 	return vitaBookingURLDefault
 }
 
-func registerVoiceRoutes(r chi.Router) {
+func registerVoiceRoutes(r chi.Router, db *sql.DB) {
+	// Load persisted AI mode on startup so container restarts don't reset the kill switch.
+	var aiVal string
+	_ = db.QueryRow(`SELECT value FROM system_settings WHERE key='vita_ai_enabled'`).Scan(&aiVal)
+	if aiVal == "1" {
+		vitaAIEnabled.Store(true)
+		log.Printf("level=INFO msg=\"VITA AI voice: restored ENABLED from DB\"")
+	}
+
 	r.Post("/voice/inbound", vitaVoiceInboundHandler())
 	r.Post("/voice/play", vitaVoicePlayHandler())
 	r.Post("/voice/menu", vitaVoiceMenuHandler())
@@ -34,7 +43,7 @@ func registerVoiceRoutes(r chi.Router) {
 	r.Post("/voice/voicemail", vitaVoiceVoicemailPromptHandler())
 	r.Post("/voice/voicemail-done", vitaVoiceVoicemailDoneHandler())
 	r.Post("/voice/queue-fallback", vitaVoiceQueueFallbackHandler())
-	r.Get("/voice/vita/toggle", vitaQueueToggleHandler())
+	r.Get("/voice/vita/toggle", vitaQueueToggleHandler(db))
 	// AI voice stream routes
 	r.Post("/voice/stream", vitaStreamTwiMLHandler())
 	r.Get("/voice/stream/ws", vitaStreamWSHandler())
@@ -257,8 +266,23 @@ func vitaVoiceVoicemailDoneHandler() http.HandlerFunc {
 }
 
 // vitaQueueToggleHandler lets authorized staff force-close or reopen the VITA queue.
-// GET /voice/vita/toggle?token=TOKEN&state=close|open|status
-func vitaQueueToggleHandler() http.HandlerFunc {
+// GET /voice/vita/toggle?token=TOKEN&state=close|open|ai-on|ai-off|status
+func vitaQueueToggleHandler(db *sql.DB) http.HandlerFunc {
+	persistAI := func(enabled bool) {
+		val := "0"
+		if enabled {
+			val = "1"
+		}
+		_, err := db.Exec(
+			`INSERT INTO system_settings(key,value,updated_at) VALUES('vita_ai_enabled',?,?)
+			 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
+			val, time.Now().UTC().Format(time.RFC3339),
+		)
+		if err != nil {
+			log.Printf("level=WARN msg=\"vita toggle: failed to persist ai state\" err=%v", err)
+		}
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimSpace(os.Getenv("VITA_TOGGLE_TOKEN"))
 		if token == "" || strings.TrimSpace(r.URL.Query().Get("token")) != token {
@@ -278,9 +302,11 @@ func vitaQueueToggleHandler() http.HandlerFunc {
 			fmt.Fprintln(w, "VITA queue: OPEN — normal Sat/Sun schedule resumed.")
 		case "ai-on":
 			vitaAIEnabled.Store(true)
+			persistAI(true)
 			fmt.Fprintln(w, "VITA AI voice: ENABLED — callers will reach the AI assistant during VITA hours.")
 		case "ai-off":
 			vitaAIEnabled.Store(false)
+			persistAI(false)
 			fmt.Fprintln(w, "VITA AI voice: DISABLED — callers will reach the standard IVR menu.")
 		default:
 			until := vitaForceCloseUntil.Load()
