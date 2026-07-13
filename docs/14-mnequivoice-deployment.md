@@ -3,7 +3,7 @@
 **Organization:** Minnesota EquiVoice Partnership (MN-EVP), 501(c)(3)  
 **Primary domain:** mnequivoicepartnership.org  
 **Colosseum instance:** colosseum.mnequivoicepartnership.org  
-**Last updated:** 2026-06-18
+**Last updated:** 2026-07-13
 
 ---
 
@@ -16,12 +16,16 @@
 5. [Colosseum Agents](#5-colosseum-agents)
 6. [Environment Variables](#6-environment-variables)
 7. [Phone System](#7-phone-system)
-8. [FreePBX — Volunteer Phone System](#8-freepbx--volunteer-phone-system)
-9. [Adding a New Extension](#9-adding-a-new-extension)
-10. [DNS](#10-dns)
-11. [CI/CD — Coolify](#11-cicd--coolify)
-12. [Persistent Storage](#12-persistent-storage)
-13. [Pending Items](#13-pending-items)
+8. [VITA Voice AI Pipeline](#8-vita-voice-ai-pipeline)
+9. [A2P 10DLC SMS Compliance](#9-a2p-10dlc-sms-compliance)
+10. [WordPress Compliance Pages](#10-wordpress-compliance-pages)
+11. [Database Tables — Voice & SMS](#11-database-tables--voice--sms)
+12. [FreePBX — Volunteer Phone System](#12-freepbx--volunteer-phone-system)
+13. [Adding a New Extension](#13-adding-a-new-extension)
+14. [DNS](#14-dns)
+15. [CI/CD — Coolify](#15-cicd--coolify)
+16. [Persistent Storage](#16-persistent-storage)
+17. [Pending Items](#17-pending-items)
 
 ---
 
@@ -161,9 +165,17 @@ sudo docker logs <container_name> --tail 100 -f
 |--------|------|---------|
 | POST | /voice/inbound | VITA IVR entry point (Twilio webhook) |
 | POST | /voice/play | Replay IVR message |
-| POST | /voice/menu | IVR digit handler (1=replay, 2=voicemail) |
+| POST | /voice/menu | IVR digit handler (1=replay, 2=voicemail, 3=transfer, 4=SMS consent) |
+| POST | /voice/after-hours-menu | After-hours digit handler (1=voicemail, 2=SMS consent) |
+| POST | /voice/transfer | Direct SIP dial to volunteer queue (ext 650) |
+| POST | /voice/sms-consent | Plays A2P consent disclosure, gathers DTMF/speech response |
+| POST | /voice/sms-consent-response | Records consent decision, sends SMS only if consented |
 | POST | /voice/voicemail | Voicemail prompt |
 | POST | /voice/voicemail-done | Voicemail recording complete, notifies admin |
+| POST | /voice/queue-fallback | Plays voicemail fallback when volunteer queue is unavailable |
+| POST | /voice/stream | Returns TwiML `<Connect><Stream>` for AI voice session |
+| GET | /voice/stream/ws | WebSocket endpoint — Twilio Media Streams audio bridge |
+| GET | /voice/vita/toggle | Staff toggle: `?state=open\|close\|ai-on\|ai-off\|status` |
 | POST | /sms/inbound | SMS chatbot (Twilio webhook) |
 | POST | /whatsapp/inbound | WhatsApp chatbot (Twilio webhook) |
 | GET | /api/runs/:id/artifacts/:aid/content | Download agent-generated file |
@@ -183,14 +195,35 @@ The following paths bypass basic auth and API token checks (required for Twilio 
 ### VITA IVR (`internal/api/voice_routes.go`)
 
 When a call arrives at +16513027258:
+
+**During VITA hours (Sat–Sun 9 AM–5 PM CT) with AI enabled:**
 1. Twilio POSTs to `/voice/inbound`
-2. Colosseum sends an SMS with the booking link to the caller's number
-3. Colosseum returns TwiML: plays IVR message (Alice voice), offers menu
-4. Press 1 → replay message; Press 2 → voicemail
+2. Colosseum returns TwiML `<Connect><Stream>` — call audio streams to the AI voice pipeline
+3. AI answers, handles questions, and can transfer to volunteer queue or voicemail
+4. If AI fails, call falls back to `/voice/play` (standard IVR)
+
+**During VITA hours with AI disabled (or outside VITA hours):**
+1. Twilio POSTs to `/voice/inbound`
+2. Colosseum checks schedule and force-close flag
+3. During hours: IVR plays message (Amazon Polly Joanna voice), offers menu
+   - Press 1 → replay; Press 2 → voicemail; Press 3 → volunteer transfer; Press 4 → SMS consent flow
+4. After hours / holiday: abbreviated menu — Press 1 → voicemail; Press 2 → SMS consent flow
 5. Voicemail completion POSTs to `/voice/voicemail-done`, sends SMS notification to `VITA_VOICEMAIL_NOTIFY_NUMBER`
+
+**SMS is never sent automatically.** Callers must explicitly request a text and consent via the IVR disclosure (see Section 9).
 
 **Booking URL default:** `https://outlook.office.com/book/MNEVPVITATCE@mnequivoicepartnership.org/`  
 Override with `VITA_BOOKING_URL` env var.
+
+**Queue force-close:** Use the toggle endpoint to close the queue without a redeploy. The close auto-expires at midnight CT.
+
+```
+GET /voice/vita/toggle?token=TOKEN&state=close    # force close until midnight CT
+GET /voice/vita/toggle?token=TOKEN&state=open     # reopen immediately
+GET /voice/vita/toggle?token=TOKEN&state=ai-on    # enable AI voice (persisted to DB)
+GET /voice/vita/toggle?token=TOKEN&state=ai-off   # disable AI voice (persisted to DB)
+GET /voice/vita/toggle?token=TOKEN&state=status   # show current state
+```
 
 ---
 
@@ -248,12 +281,21 @@ Set in Coolify → Colosseum application → Environment Variables.
 |----------|-------------|
 | `VITA_BOOKING_URL` | Override default Microsoft Bookings link (optional) |
 | `VITA_VOICEMAIL_NOTIFY_NUMBER` | Mobile number to receive SMS when a voicemail is left via VITA IVR (e.g. `+16512956509`) |
+| `VITA_TOGGLE_TOKEN` | Secret token required to call `/voice/vita/toggle` — keep private |
+
+### VITA Voice AI Pipeline
+
+| Variable | Description |
+|----------|-------------|
+| `DEEPGRAM_API_KEY` | Deepgram API key — enables STT (nova-2) and TTS (Aura/Joanna) for the AI voice pipeline |
+
+The AI voice pipeline is only active when `DEEPGRAM_API_KEY` is set **and** AI mode has been enabled via the toggle endpoint (`state=ai-on`). AI mode is persisted to the `system_settings` table so it survives container restarts.
 
 ### AI Providers
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Claude models |
+| `ANTHROPIC_API_KEY` | Claude models — required for both the AI voice pipeline (Haiku) and agent runs |
 | `OPENAI_API_KEY` | OpenAI models |
 | `DEEPSEEK_API_KEY` | DeepSeek models |
 
@@ -285,22 +327,167 @@ Set in Coolify → Colosseum application → Environment Variables.
 **Termination** = outbound calls from FreePBX → Twilio → PSTN  
 **Origination** = inbound calls from PSTN → Twilio → FreePBX
 
-### A2P 10DLC Registration
+### Twilio Phone Numbers
 
-**Status:** **In Review** (submitted 2026-06-13) — SMS messages are currently **Undelivered** by carriers until approved.
-
-Campaign SID: `CM70cd3063a4406b93308762ce3177ca5b`  
-Brand: Minnesota EquiVoice Partnership (`BN54a91bdb1ddd80348c84fc92ef35b758`)  
-Messaging service: `MG91900402c4f9f2500f8832adf07d8452`
-
-CTA URL: `https://mnequivoicepartnership.org/vita-tce-services`  
-Privacy Policy URL: `https://mnequivoicepartnership.org/privacy-policy`
-
-After approval: remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify.
+| Number | Friendly Name | Voice Handler | Purpose |
+|--------|--------------|---------------|---------|
+| +16513027258 | (651) 302-7258 | Webhook → `https://colosseum.mnequivoicepartnership.org/voice/inbound` | VITA IVR + SMS chatbot |
+| +16515151968 | (651) 515-1968 | SIP Trunk → MNEquivoiceSIP | Volunteer softphone (Fred Kigundu) |
 
 ---
 
-## 8. FreePBX — Volunteer Phone System
+## 8. VITA Voice AI Pipeline
+
+The VITA Voice AI Pipeline routes inbound calls through a real-time speech AI stack when enabled. Implementation is in `internal/voice/`.
+
+### Architecture
+
+```
+Twilio (caller audio)
+  │
+  ▼
+/voice/inbound  ──── TwiML <Connect><Stream> ────▶  /voice/stream/ws (WebSocket)
+                                                           │
+                                              ┌────────────┼────────────┐
+                                              ▼            ▼            ▼
+                                         Deepgram      Claude        Deepgram
+                                         STT           Haiku         Aura TTS
+                                         nova-2        (LLM)         (mulaw 8kHz)
+                                         streaming     max 150 tok
+                                              │
+                                              └──── audio chunks back to caller via WebSocket
+```
+
+### Components
+
+| File | Role |
+|------|------|
+| `internal/voice/session.go` | Per-call orchestrator — WebSocket event loop, greeting, barge-in |
+| `internal/voice/conversation.go` | Claude Haiku integration — streaming LLM, phrase extraction, intent detection |
+| `internal/voice/deepgram.go` | Deepgram STT — streaming WebSocket, endpointing 300 ms |
+| `internal/voice/tts.go` | Deepgram Aura TTS — REST API, mulaw 8 kHz output |
+| `internal/voice/mulaw.go` | PCM ↔ mulaw codec |
+| `internal/api/voice_stream.go` | HTTP handlers — TwiML generator + WebSocket upgrader |
+
+### AI Capabilities
+
+The AI assistant (Claude Haiku) can:
+1. Answer questions about VITA eligibility, locations, hours, and documents
+2. Transfer the caller to the volunteer queue (`/voice/transfer` → SIP ext 650)
+3. Redirect to voicemail (`/voice/voicemail`)
+4. Hand off to the SMS consent IVR (`/voice/sms-consent`) when caller asks for an appointment link by text
+
+### Toggle (Kill Switch)
+
+AI mode is toggled via `GET /voice/vita/toggle?token=TOKEN&state=ai-on|ai-off`. The state is persisted in the `system_settings` SQLite table so it survives container restarts. Use `state=status` to check the current state without changing it.
+
+---
+
+## 9. A2P 10DLC SMS Compliance
+
+### Campaign Details
+
+**Status:** Resubmission in progress (July 2026) — previous submissions rejected (error 30909/30917).
+
+| Field | Value |
+|-------|-------|
+| Campaign SID | `CM70cd3063a4406b93308762ce3177ca5b` |
+| Brand | Minnesota EquiVoice Partnership (`BN54a91bdb1ddd80348c84fc92ef35b758`) |
+| Messaging service | `MG91900402c4f9f2500f8832adf07d8452` |
+
+### Approved Opt-In Methods
+
+Only **Via Text** and **Verbal** are selected. Website/Form is not selected.
+
+| Method | Description |
+|--------|-------------|
+| Via Text | Caller sees SMS disclosure on VITA page and voluntarily texts (651) 302-7258 — first text constitutes consent to automated replies about their inquiry |
+| Verbal / IVR | During a call, caller selects the text-link option → IVR reads full A2P disclosure → caller presses 1 or says "yes" → one automated SMS is sent |
+
+### Campaign URLs
+
+| Field | URL |
+|-------|-----|
+| Privacy Policy | `https://mnequivoicepartnership.org/privacy-policy/` |
+| Terms of Service | `https://mnequivoicepartnership.org/terms/` |
+| IVR consent evidence | `https://mnequivoicepartnership.org/vita-sms-consent-disclosure/` |
+
+### IVR Consent Script (verbatim)
+
+> "Would you like Minnesota EquiVoice Partnership VITA to send one automated text message containing the appointment scheduling link to the number you are calling from? Message and data rates may apply. Reply STOP to opt out or HELP for help. Press 1 or say yes to agree. Press 2 or say no to continue without a text."
+
+This exact wording is in both `voice_routes.go` (`vitaVoiceSMSConsentHandler`) and the public disclosure page. "One automated text message" is included inline so frequency is stated at the point of consent.
+
+### SMS Keyword Responses
+
+| Keyword | Response sent |
+|---------|---------------|
+| STOP / CANCEL / END / QUIT / UNSUBSCRIBE | Minnesota EquiVoice Partnership VITA: You have been unsubscribed and will receive no further messages. Reply START to resubscribe or call (651) 302-7258 for VITA services. |
+| START / YES / UNSTOP | Minnesota EquiVoice Partnership VITA: You have been re-subscribed to automated VITA tax-assistance responses. Message frequency varies. Msg & data rates may apply. Reply STOP to opt out or HELP for help. |
+| HELP | Minnesota EquiVoice Partnership VITA: Help is available at mnequivoicepartnership.org or call (651) 302-7258. Msg & data rates may apply. Reply STOP to opt out. |
+
+### Consent Audit Log
+
+Every IVR consent interaction is recorded in the `sms_consent_log` table with: call SID, caller phone number, consent decision, method (dtmf/speech), raw response, and timestamp. This provides per-call evidence for A2P compliance audits.
+
+After A2P approval: remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify environment variables.
+
+---
+
+## 10. WordPress Compliance Pages
+
+Three HTML files in the repo root are pasted into WordPress as Custom HTML blocks:
+
+| File | WordPress slug | Purpose |
+|------|---------------|---------|
+| `privacy-policy.html` | `/privacy-policy/` | Full privacy policy including SMS section |
+| `terms.html` | `/terms/` | SMS Terms of Service (15 sections) |
+| `ivr-consent-script.html` | `/vita-sms-consent-disclosure/` | Verbatim IVR consent script — A2P evidence URL |
+| `vita-page.html` | `/volunteer-tax-assisstance-and-tax-assistance-for-the-elderly-vita-tce/` | VITA services page with SMS CTA disclosure |
+
+All pages use brand colors `#0B1545` (navy) and `#B31942` (red). After any edit to these files, paste the updated HTML into the corresponding WordPress page and publish.
+
+---
+
+## 11. Database Tables — Voice & SMS
+
+Two migrations were added to support the voice AI and A2P compliance features:
+
+### `system_settings` (migration 014)
+
+General key-value store for persistent runtime configuration.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `key` | TEXT PRIMARY KEY | Setting name (e.g. `vita_ai_enabled`) |
+| `value` | TEXT | Setting value |
+| `updated_at` | TEXT | ISO 8601 timestamp of last change |
+
+Current keys:
+
+| Key | Values | Purpose |
+|-----|--------|---------|
+| `vita_ai_enabled` | `0` / `1` | Whether the VITA Voice AI pipeline is active |
+
+### `sms_consent_log` (migration 015)
+
+Per-call audit log for A2P SMS consent.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `call_sid` | TEXT | Twilio Call SID |
+| `phone_number` | TEXT | Caller's phone number |
+| `consented` | INTEGER | `1` = agreed, `0` = declined or no response |
+| `consent_method` | TEXT | `dtmf` or `speech` |
+| `consent_response` | TEXT | Raw digit pressed or speech result |
+| `consented_at` | TEXT | ISO 8601 UTC timestamp |
+
+Indexed on `call_sid` and `phone_number`.
+
+---
+
+## 12. FreePBX — Volunteer Phone System
 
 **Admin UI:** https://voice.mnequivoicepartnership.org/admin  
 **SSH:** `ssh -i ~/.ssh/id_rsa pbxadmin@20.9.49.33`  
@@ -410,7 +597,7 @@ Added via `fwconsole firewall add trusted`:
 
 ---
 
-## 9. Adding a New Extension
+## 13. Adding a New Extension
 
 Follow these steps each time a new volunteer softphone is added.
 
@@ -487,7 +674,7 @@ Add the extension to the Extensions table in Section 8 and update the Architectu
 
 ---
 
-## 10. DNS
+## 14. DNS
 
 All records point to Colosseum VM (128.203.195.79) unless noted.
 
@@ -501,7 +688,7 @@ All records point to Colosseum VM (128.203.195.79) unless noted.
 
 ---
 
-## 11. CI/CD — Coolify
+## 15. CI/CD — Coolify
 
 **Dashboard:** https://coolify.mnequivoicepartnership.org  
 **Direct (IP):** http://128.203.195.79:8000 (restricted to admin IP)  
@@ -516,7 +703,7 @@ sudo /opt/equivoice-scripts/restore-docs.sh
 
 ---
 
-## 12. Persistent Storage
+## 16. Persistent Storage
 
 | Path | Volume | Contents |
 |------|--------|----------|
@@ -526,14 +713,18 @@ sudo /opt/equivoice-scripts/restore-docs.sh
 
 ---
 
-## 13. Pending Items
+## 17. Pending Items
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify | High | After A2P campaign approved (currently **In Review** since 2026-06-13) |
-| Enable SRTP for ext 102 | Low | Deferred — Linphone SRTP is global and would break Ubiquiti desk phone account. Revisit when Ubiquiti is ported to FreePBX or a per-account SRTP softphone (e.g. Zoiper) replaces Linphone |
-| Configure Linphone keep-alive / disable battery optimization | Medium | Prevents registration drops when app is backgrounded |
-| Configure `vita.mnequivoicepartnership.org` DNS A record → 128.203.195.79 | Low | Not yet active |
-| Add street addresses to vita-page.html location cards | Low | Currently shows placeholder branch names |
-| Add extension 101 assignment | Low | Spare extension, assign when next volunteer onboards |
+| A2P 10DLC resubmission | **Critical** | Resubmitting July 2026 with corrected Message Flow field, "one automated text message" wording in IVR, opt-in methods = Via Text + Verbal only |
+| Paste WordPress compliance pages | **High** | `privacy-policy.html`, `terms.html`, `ivr-consent-script.html` → WordPress pages at their slugs; `vita-page.html` already updated |
+| Remove `TWILIO_SKIP_SIG_VALIDATION` from Coolify | High | After A2P campaign approved — SMS currently undelivered by carriers |
+| Live test of VITA Voice AI | High | Test during VITA hours (Sat–Sun 9 AM–5 PM CT) with `state=ai-on` enabled |
 | Renew Asterisk TLS cert after Let's Encrypt renewal | Recurring | Cert expires 2026-08-21; copy to `/etc/asterisk/keys/` and run `fwconsole certificates --import` |
+| Ring Groups 601–603 — staff cell forwards | Medium | Configure in FreePBX via Bulk Handler |
+| VITA after-hours re-recording | Medium | New voice + library location details |
+| Enable SRTP for ext 102 | Low | Deferred — Linphone SRTP is global and would break Ubiquiti desk phone account |
+| Configure Linphone keep-alive / disable battery optimization | Low | Prevents registration drops when app is backgrounded |
+| Add street addresses to vita-page.html location cards | Low | Currently shows branch names only |
+| Add extension 101 assignment | Low | Spare extension, assign when next volunteer onboards |

@@ -134,6 +134,70 @@ Output:
 - `log`
 - optional `error`
 
+## MCP (Model Context Protocol) Servers
+
+Colosseum agents can connect to external MCP servers at run time, exposing their tools to the LLM alongside built-in tools. The implementation lives in `internal/mcp/`.
+
+### How It Works
+
+When an agent run starts, Colosseum:
+
+1. Queries the database for all MCP servers assigned to that agent (`agent_mcp_servers` join `mcp_servers`)
+2. Connects to each enabled server
+3. Calls `tools/list` to discover what tools the server exposes
+4. Prefixes every tool name as `mcp__{serverSlug}__{toolName}` and adds them to the LLM's tool list
+5. Routes any `mcp__`-prefixed tool call to the correct server during the agent loop
+6. Closes all connections when the run ends
+
+### Tool Naming
+
+MCP tools follow the convention:
+
+```
+mcp__{server_slug}__{local_tool_name}
+```
+
+`server_slug` is the server's `name` field lowercased with non-alphanumeric characters replaced by underscores. For example, a server named `"My Files"` with a tool `read_file` becomes `mcp__my_files__read_file`.
+
+### Transports
+
+Two transports are supported, configured per server via the `transport` field:
+
+**stdio** (default)
+
+Spawns the MCP server as a local subprocess and communicates via newline-delimited JSON-RPC 2.0 over stdin/stdout. Used for locally installed MCP servers such as `npx @modelcontextprotocol/server-filesystem`.
+
+Config fields used: `command`, `args_json`, `env_json`
+
+**http**
+
+Sends all JSON-RPC messages as HTTP POST requests to a single endpoint URL. Used for remote or hosted MCP servers.
+
+Config fields used: `url`, `headers_json`, `timeout_seconds`
+
+### Database Schema
+
+| Table | Purpose |
+|---|---|
+| `mcp_servers` | One row per MCP server: name, transport, command/URL, credentials, timeout |
+| `agent_mcp_servers` | Join table assigning servers to agents (many-to-many) |
+
+### Adding an MCP Server
+
+1. Insert a row into `mcp_servers` with `enabled = 1` and the appropriate transport config
+2. Insert a row into `agent_mcp_servers` linking the server to the target agent
+3. On the next run for that agent, the server will be connected and its tools available automatically — no restart required
+
+### Governance
+
+MCP tools participate in the same policy engine as built-in tools. Add `mcp__{slug}__*` patterns to an agent's `allowed_tools` or policy rules to control access.
+
+### Failure Handling
+
+If a server fails to connect or `tools/list` returns an error, that server is skipped and logged. The run continues with the remaining servers. Individual tool call failures return an `[mcp error]`-prefixed string to the LLM rather than aborting the run.
+
+---
+
 ## Ecosystem Resources
 
 ### Policies
