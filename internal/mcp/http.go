@@ -15,11 +15,12 @@ import (
 // HTTPClient implements Client using the MCP Streamable HTTP transport.
 // All JSON-RPC messages are sent as HTTP POST to a single endpoint URL.
 type HTTPClient struct {
-	url     string
-	headers map[string]string
-	timeout time.Duration
-	nextID  atomic.Int32
-	http    *http.Client
+	url       string
+	headers   map[string]string
+	timeout   time.Duration
+	nextID    atomic.Int32
+	http      *http.Client
+	sessionID atomic.Value // string
 }
 
 func NewHTTPClient(url string, headers map[string]string, timeout time.Duration) *HTTPClient {
@@ -48,11 +49,17 @@ func (c *HTTPClient) doRPC(ctx context.Context, req rpcRequest) (rpcResponse, er
 	for k, v := range c.headers {
 		httpReq.Header.Set(k, v)
 	}
+	if sid, ok := c.sessionID.Load().(string); ok && sid != "" {
+		httpReq.Header.Set("Mcp-Session-Id", sid)
+	}
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
 		return rpcResponse{}, fmt.Errorf("http request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
+		c.sessionID.Store(sid)
+	}
 	if resp.StatusCode >= 400 {
 		return rpcResponse{}, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
 	}
