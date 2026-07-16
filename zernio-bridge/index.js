@@ -146,7 +146,7 @@ app.post('/generate-card', async (req, res) => {
         publishNow: true,
       },
     });
-    res.json({ ok: true, post });
+    res.json({ ok: true, post, imageUrl: up.publicUrl });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
