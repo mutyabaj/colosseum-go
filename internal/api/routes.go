@@ -175,6 +175,12 @@ func registerAPIRoutes(
 	// Twilio Voice webhook — VITA IVR with auto-SMS booking link
 	registerVoiceRoutes(r, db)
 
+	// VITA pre-appointment intake — called by the VITA-Intake-Assistant
+	// agent's http.request tool; writes to the MEP Volunteer App's
+	// Supabase project. Protected by VITA_INTAKE_TOKEN, not the main
+	// API auth (this endpoint has no session/API-token context).
+	r.Post("/internal/vita-intake", vitaIntakeHandler())
+
 	// MCP server management
 	registerMCPRoutes(r, db)
 }
