@@ -33,15 +33,46 @@ func (vc vitaIntakeConfig) ready() bool {
 	return vc.SupabaseURL != "" && vc.SupabaseServiceKey != ""
 }
 
+// validAnswerValues are the only accepted values for each income/expenses/
+// life_events entry. Plain booleans can't distinguish "client said no" from
+// "conversation was interrupted before this was asked" - both would
+// otherwise silently save as false.
+var validAnswerValues = map[string]bool{
+	"yes":          true,
+	"no":           true,
+	"unsure":       true,
+	"not_answered": true,
+}
+
+var validStatusValues = map[string]bool{
+	"started":     true,
+	"partial":     true,
+	"completed":   true,
+	"save_failed": true,
+	"reviewed":    true,
+}
+
 // vitaIntakeRequest mirrors the client_intake table columns.
 type vitaIntakeRequest struct {
-	Phone           string         `json:"phone"`
-	FirstName       string         `json:"first_name"`
-	AppointmentDate string         `json:"appointment_date"` // YYYY-MM-DD
-	SiteLocation    string         `json:"site_location,omitempty"`
-	Income          map[string]any `json:"income,omitempty"`
-	Expenses        map[string]any `json:"expenses,omitempty"`
-	LifeEvents      map[string]any `json:"life_events,omitempty"`
+	Phone                string            `json:"phone"`
+	FirstName            string            `json:"first_name"`
+	AppointmentDate      string            `json:"appointment_date"` // YYYY-MM-DD
+	SiteLocation         string            `json:"site_location,omitempty"`
+	TaxYear              int               `json:"tax_year,omitempty"`
+	QuestionnaireVersion string            `json:"questionnaire_version,omitempty"`
+	Status               string            `json:"status,omitempty"`
+	Income               map[string]string `json:"income,omitempty"`
+	Expenses             map[string]string `json:"expenses,omitempty"`
+	LifeEvents           map[string]string `json:"life_events,omitempty"`
+}
+
+func validateAnswerMap(name string, m map[string]string) error {
+	for k, v := range m {
+		if !validAnswerValues[v] {
+			return fmt.Errorf("%s.%s: invalid value %q (must be yes, no, unsure, or not_answered)", name, k, v)
+		}
+	}
+	return nil
 }
 
 func (req vitaIntakeRequest) validate() error {
@@ -53,6 +84,18 @@ func (req vitaIntakeRequest) validate() error {
 	}
 	if strings.TrimSpace(req.AppointmentDate) == "" {
 		return fmt.Errorf("appointment_date is required (YYYY-MM-DD)")
+	}
+	if req.Status != "" && !validStatusValues[req.Status] {
+		return fmt.Errorf("status: invalid value %q", req.Status)
+	}
+	if err := validateAnswerMap("income", req.Income); err != nil {
+		return err
+	}
+	if err := validateAnswerMap("expenses", req.Expenses); err != nil {
+		return err
+	}
+	if err := validateAnswerMap("life_events", req.LifeEvents); err != nil {
+		return err
 	}
 	return nil
 }
@@ -91,13 +134,16 @@ func vitaIntakeHandler() http.HandlerFunc {
 			return
 		}
 		if req.Income == nil {
-			req.Income = map[string]any{}
+			req.Income = map[string]string{}
 		}
 		if req.Expenses == nil {
-			req.Expenses = map[string]any{}
+			req.Expenses = map[string]string{}
 		}
 		if req.LifeEvents == nil {
-			req.LifeEvents = map[string]any{}
+			req.LifeEvents = map[string]string{}
+		}
+		if req.Status == "" {
+			req.Status = "completed"
 		}
 
 		body, err := json.Marshal(req)
