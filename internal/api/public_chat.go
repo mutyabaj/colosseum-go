@@ -318,9 +318,12 @@ func buildPublicChatPage(agentID, name, desc, startersJSON, token string) string
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
          background: #f0f4f0; display: flex; flex-direction: column; height: 100dvh; }
-  header { background: #1a472a; color: #fff; padding: 14px 20px; }
+  header { background: #1a472a; color: #fff; padding: 14px 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   header h1 { font-size: 1.1rem; font-weight: 600; }
   header p  { font-size: 0.8rem; opacity: 0.8; margin-top: 2px; }
+  #restart-btn { background: transparent; border: 1px solid rgba(255,255,255,0.5); color: #fff; border-radius: 14px;
+                 padding: 4px 10px; font-size: 0.72rem; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  #restart-btn:hover { background: rgba(255,255,255,0.12); }
   #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
   .bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
   .bubble.user { background: #1a472a; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
@@ -345,8 +348,11 @@ func buildPublicChatPage(agentID, name, desc, startersJSON, token string) string
 </head>
 <body>
 <header>
-  <h1 id="agent-name">` + htmlEscape(name) + `</h1>
-  <p id="agent-desc">` + htmlEscape(desc) + `</p>
+  <div>
+    <h1 id="agent-name">` + htmlEscape(name) + `</h1>
+    <p id="agent-desc">` + htmlEscape(desc) + `</p>
+  </div>
+  <button id="restart-btn" onclick="startOver()">Start Over</button>
 </header>
 <div id="messages"></div>
 <div id="starters"></div>
@@ -365,6 +371,11 @@ const STARTERS = ` + startersJSON + `;
 const $ = id => document.getElementById(id);
 let sessionId = sessionStorage.getItem('pub_session_' + AGENT_ID);
 let busy = false;
+
+function startOver() {
+  sessionStorage.removeItem('pub_session_' + AGENT_ID);
+  location.reload();
+}
 
 function addBubble(role, text) {
   const d = document.createElement('div');
@@ -407,40 +418,57 @@ async function sendMessage(text) {
   const runId = d.run_id;
 
   let replied = false;
-  const src = new EventSource('/api/public/stream/runs/' + runId + '?public_token=' + encodeURIComponent(TOKEN));
-  src.addEventListener('run_event', e => {
-    try {
-      const ev = JSON.parse(e.data);
-      const p = ev.payload || {};
-      const et = ev.event_type || '';
-      // Show text as soon as the model responds
-      if (et === 'model.response' && p.text) {
-        if (thinking.parentNode) thinking.remove();
-        if (!replied) { addBubble('assistant', p.text); replied = true; }
-        else {
-          const last = $('messages').querySelector('.bubble.assistant:last-child');
-          if (last) { last.textContent = p.text; $('messages').scrollTop = $('messages').scrollHeight; }
+  let retries = 0;
+  const maxRetries = 3;
+
+  const openStream = () => {
+    const src = new EventSource('/api/public/stream/runs/' + runId + '?public_token=' + encodeURIComponent(TOKEN));
+    src.addEventListener('run_event', e => {
+      try {
+        const ev = JSON.parse(e.data);
+        const p = ev.payload || {};
+        const et = ev.event_type || '';
+        retries = 0; // any real event means the connection is healthy again
+        // Show text as soon as the model responds
+        if (et === 'model.response' && p.text) {
+          if (thinking.parentNode) thinking.remove();
+          if (!replied) { addBubble('assistant', p.text); replied = true; }
+          else {
+            const last = $('messages').querySelector('.bubble.assistant:last-child');
+            if (last) { last.textContent = p.text; $('messages').scrollTop = $('messages').scrollHeight; }
+          }
         }
-      }
-      if (et === 'run.completed' || et === 'run.failed') {
-        src.close();
-        if (thinking.parentNode) thinking.remove();
-        if (!replied) {
-          const text = p.result || p.error || 'Something went wrong. Please try again.';
-          addBubble(et === 'run.completed' ? 'assistant' : 'thinking', text);
+        if (et === 'run.completed' || et === 'run.failed') {
+          src.close();
+          if (thinking.parentNode) thinking.remove();
+          if (!replied) {
+            const text = p.result || p.error || 'Something went wrong. Please try again.';
+            addBubble(et === 'run.completed' ? 'assistant' : 'thinking', text);
+          }
+          busy = false;
+          $('send-btn').disabled = false;
         }
-        busy = false;
-        $('send-btn').disabled = false;
+      } catch {}
+    });
+    src.onerror = () => {
+      src.close();
+      // The run itself is very likely still completing on the server even
+      // though this stream connection dropped (proxy hiccup, network blip).
+      // Reconnect a few times before telling the user anything went wrong -
+      // a fresh connection replays events from the start of this run, so
+      // nothing is lost.
+      if (retries < maxRetries) {
+        retries++;
+        setTimeout(openStream, 1000 * retries);
+        return;
       }
-    } catch {}
-  });
-  src.onerror = () => {
-    src.close();
-    if (thinking.parentNode) thinking.remove();
-    if (!replied) addBubble('assistant', 'Connection error. Please try again.');
-    busy = false;
-    $('send-btn').disabled = false;
+      if (thinking.parentNode) thinking.remove();
+      if (!replied) addBubble('assistant', 'Connection error. Please try again.');
+      busy = false;
+      $('send-btn').disabled = false;
+    };
   };
+  openStream();
 }
 
 // Render starter prompts
