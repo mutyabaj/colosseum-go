@@ -181,6 +181,16 @@ func registerAPIRoutes(
 	// API auth (this endpoint has no session/API-token context).
 	r.Post("/internal/vita-intake", vitaIntakeHandler())
 
+	// JLM bookkeeping-prospecting agent -- dataset save/dedup/export, plus a
+	// separate Zoho-SMTP send endpoint not wired into that agent's own
+	// allowed_tools (outreach is draft-only there). Protected by
+	// JLM_INTERNAL_TOKEN, not the main API auth.
+	r.Post("/internal/jlm-prospects", jlmSaveProspectHandler(db))
+	r.Post("/internal/jlm-prospects/search", jlmCheckProspectHandler(db))
+	r.Post("/internal/jlm-prospects/list-names", jlmListOrgNamesHandler(db))
+	r.Get("/internal/jlm-prospects/export", jlmExportProspectsHandler(db))
+	r.Post("/internal/jlm-outreach-email", jlmOutreachEmailHandler())
+
 	// MCP server management
 	registerMCPRoutes(r, db)
 }

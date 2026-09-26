@@ -138,7 +138,12 @@ func isPublicPath(path string) bool {
 		strings.HasPrefix(path, "/voice/") ||
 		path == "/sms/inbound" ||
 		path == "/whatsapp/inbound" ||
-		path == "/internal/vita-intake"
+		path == "/internal/vita-intake" ||
+		path == "/internal/jlm-prospects" ||
+		path == "/internal/jlm-prospects/search" ||
+		path == "/internal/jlm-prospects/list-names" ||
+		path == "/internal/jlm-prospects/export" ||
+		path == "/internal/jlm-outreach-email"
 }
 
 func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {
