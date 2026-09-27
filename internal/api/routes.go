@@ -189,6 +189,7 @@ func registerAPIRoutes(
 	r.Post("/internal/jlm-prospects/search", jlmCheckProspectHandler(db))
 	r.Post("/internal/jlm-prospects/list-names", jlmListOrgNamesHandler(db))
 	r.Get("/internal/jlm-prospects/export", jlmExportProspectsHandler(db))
+	r.Post("/internal/jlm-prospects/push-to-onedrive", jlmPushToOneDriveHandler(db))
 	r.Post("/internal/jlm-outreach-email", jlmOutreachEmailHandler())
 
 	// MCP server management

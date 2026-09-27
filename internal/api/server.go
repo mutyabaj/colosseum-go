@@ -143,6 +143,7 @@ func isPublicPath(path string) bool {
 		path == "/internal/jlm-prospects/search" ||
 		path == "/internal/jlm-prospects/list-names" ||
 		path == "/internal/jlm-prospects/export" ||
+		path == "/internal/jlm-prospects/push-to-onedrive" ||
 		path == "/internal/jlm-outreach-email"
 }
 

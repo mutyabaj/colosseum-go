@@ -1,16 +1,21 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/smtp"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/adevireddy/colosseum/internal/secrets"
 	"github.com/google/uuid"
 )
 
@@ -185,55 +190,68 @@ func jlmListOrgNamesHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+var jlmCSVHeader = []string{"Organization", "EIN", "Location", "Mission", "Annual Revenue",
+	"Latest 990 Year", "Latest 990 Summary", "Website", "Executive Director", "Contact Email",
+	"Contact Phone", "Accounting Indicators", "Why Prospect", "Draft Subject", "Draft Body",
+	"Status", "Created At"}
+
+// buildProspectsCSV renders the given run (or, with an empty runID, every
+// prospect) as CSV bytes. Shared by the export endpoint and the OneDrive
+// push step so the two never drift.
+func buildProspectsCSV(ctx context.Context, db *sql.DB, runID string) ([]byte, error) {
+	cols := `organization_name, ein, location, mission, annual_revenue, latest_990_year,
+		latest_990_summary, website, executive_director, contact_email, contact_phone,
+		accounting_indicators, why_prospect, draft_outreach_subject, draft_outreach_body, status, created_at`
+	var rows *sql.Rows
+	var err error
+	if runID != "" {
+		rows, err = db.QueryContext(ctx, `SELECT `+cols+` FROM jlm_prospects WHERE run_id = ? ORDER BY created_at`, runID)
+	} else {
+		rows, err = db.QueryContext(ctx, `SELECT `+cols+` FROM jlm_prospects ORDER BY created_at`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buf bytes.Buffer
+	cw := csv.NewWriter(&buf)
+	_ = cw.Write(jlmCSVHeader)
+	for rows.Next() {
+		var vals [17]sql.NullString
+		ptrs := make([]any, 17)
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			continue
+		}
+		record := make([]string, 17)
+		for i, v := range vals {
+			record[i] = v.String
+		}
+		_ = cw.Write(record)
+	}
+	cw.Flush()
+	return buf.Bytes(), nil
+}
+
 // jlmExportProspectsHandler handles GET /internal/jlm-prospects/export?run_id=...
-// Returns a CSV of the given run (or, with no run_id, everything), fetched
-// by the OneDrive-delivery step after a scheduled run completes.
+// Returns a CSV of the given run (or, with no run_id, everything).
 func jlmExportProspectsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cfg := loadJLMConfig()
 		if !checkJLMToken(w, r, cfg.InternalToken) {
 			return
 		}
-		runID := r.URL.Query().Get("run_id")
-		var rows *sql.Rows
-		var err error
-		cols := `organization_name, ein, location, mission, annual_revenue, latest_990_year,
-			latest_990_summary, website, executive_director, contact_email, contact_phone,
-			accounting_indicators, why_prospect, draft_outreach_subject, draft_outreach_body, status, created_at`
-		if runID != "" {
-			rows, err = db.QueryContext(r.Context(), `SELECT `+cols+` FROM jlm_prospects WHERE run_id = ? ORDER BY created_at`, runID)
-		} else {
-			rows, err = db.QueryContext(r.Context(), `SELECT `+cols+` FROM jlm_prospects ORDER BY created_at`)
-		}
+		csvBytes, err := buildProspectsCSV(r.Context(), db, r.URL.Query().Get("run_id"))
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		defer rows.Close()
-
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", `attachment; filename="jlm-prospects.csv"`)
-		cw := csv.NewWriter(w)
-		_ = cw.Write([]string{"Organization", "EIN", "Location", "Mission", "Annual Revenue",
-			"Latest 990 Year", "Latest 990 Summary", "Website", "Executive Director", "Contact Email",
-			"Contact Phone", "Accounting Indicators", "Why Prospect", "Draft Subject", "Draft Body",
-			"Status", "Created At"})
-		for rows.Next() {
-			var vals [17]sql.NullString
-			ptrs := make([]any, 17)
-			for i := range vals {
-				ptrs[i] = &vals[i]
-			}
-			if err := rows.Scan(ptrs...); err != nil {
-				continue
-			}
-			record := make([]string, 17)
-			for i, v := range vals {
-				record[i] = v.String
-			}
-			_ = cw.Write(record)
-		}
-		cw.Flush()
+		_, _ = w.Write(csvBytes)
 	}
 }
 
@@ -277,5 +295,163 @@ func jlmOutreachEmailHandler() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "sent", "to": req.To})
+	}
+}
+
+// oneDriveClientID is the public-client Azure AD app registration created for
+// this integration (personal Microsoft accounts don't support the app-only
+// client-credentials flow used for the work O365 mailbox, so this uses a
+// delegated refresh token obtained once via device-code consent instead).
+const oneDriveClientID = "4c4736de-906c-4c48-9ceb-75217983e3a3"
+
+const jlmOneDriveFolderPath = "Documents/Clients/JLM Risk/Customer/Leads"
+
+func getSystemSettingValue(ctx context.Context, db *sql.DB, key string) (string, error) {
+	var value string
+	err := db.QueryRowContext(ctx, `SELECT value FROM system_settings WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
+}
+
+func setSystemSettingValue(ctx context.Context, db *sql.DB, key, value string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO system_settings(key, value, updated_at) VALUES(?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+	`, key, value, now)
+	return err
+}
+
+// refreshOneDriveToken redeems the stored refresh token for a fresh access
+// token. Personal Microsoft account refresh tokens rotate on every
+// redemption -- callers MUST persist the returned refresh token, or the next
+// call will fail once the old one is invalidated.
+func refreshOneDriveToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error) {
+	body := url.Values{
+		"client_id":     {oneDriveClientID},
+		"refresh_token": {refreshToken},
+		"grant_type":    {"refresh_token"},
+		"scope":         {"Files.ReadWrite offline_access"},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://login.microsoftonline.com/consumers/oauth2/v2.0/token", strings.NewReader(body.Encode()))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("token refresh failed: %d: %s", resp.StatusCode, string(respBody))
+	}
+	var out struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return "", "", err
+	}
+	if out.AccessToken == "" || out.RefreshToken == "" {
+		return "", "", fmt.Errorf("token refresh response missing tokens")
+	}
+	return out.AccessToken, out.RefreshToken, nil
+}
+
+// uploadCSVToOneDrive writes data to <jlmOneDriveFolderPath>/filename in the
+// signed-in personal OneDrive account, overwriting any existing file of the
+// same name.
+func uploadCSVToOneDrive(ctx context.Context, accessToken, filename string, data []byte) error {
+	target := fmt.Sprintf("%s/%s", jlmOneDriveFolderPath, filename)
+	// Path segments (incl. spaces) must be percent-encoded individually --
+	// naive url.PathEscape would also escape the "/" separators.
+	segments := strings.Split(target, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	encodedPath := strings.Join(segments, "/")
+	uploadURL := fmt.Sprintf("https://graph.microsoft.com/v1.0/me/drive/root:/%s:/content", encodedPath)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, uploadURL, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "text/csv")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("onedrive upload failed: %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// jlmPushToOneDriveHandler handles POST /internal/jlm-prospects/push-to-onedrive?run_id=...
+// Builds the CSV for the given run and pushes it straight to the personal
+// OneDrive folder via Microsoft Graph -- called by the weekly cron after a
+// research run completes. No local machine is involved.
+func jlmPushToOneDriveHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cfg := loadJLMConfig()
+		if !checkJLMToken(w, r, cfg.InternalToken) {
+			return
+		}
+		runID := r.URL.Query().Get("run_id")
+		if strings.TrimSpace(runID) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "run_id is required"})
+			return
+		}
+
+		secretKey := os.Getenv("COLOSSEUM_SECRET_KEY")
+		encRefreshToken, err := getSystemSettingValue(r.Context(), db, "jlm_onedrive_refresh_token")
+		if err != nil || encRefreshToken == "" {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "onedrive not connected (no refresh token stored)"})
+			return
+		}
+		refreshToken, err := secrets.Decrypt(encRefreshToken, secretKey)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to decrypt stored refresh token: " + err.Error()})
+			return
+		}
+
+		accessToken, newRefreshToken, err := refreshOneDriveToken(r.Context(), refreshToken)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "onedrive token refresh failed: " + err.Error()})
+			return
+		}
+		// Persist the rotated refresh token immediately -- if this fails we'd
+		// rather error loudly now than silently lose access on the next run.
+		encNew, err := secrets.Encrypt(newRefreshToken, secretKey)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to encrypt refreshed token: " + err.Error()})
+			return
+		}
+		if err := setSystemSettingValue(r.Context(), db, "jlm_onedrive_refresh_token", encNew); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to store refreshed token: " + err.Error()})
+			return
+		}
+
+		csvBytes, err := buildProspectsCSV(r.Context(), db, runID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		filename := fmt.Sprintf("jlm-prospects-%s.csv", time.Now().UTC().Format("2006-01-02"))
+		if err := uploadCSVToOneDrive(r.Context(), accessToken, filename, csvBytes); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"status": "pushed", "filename": filename, "path": jlmOneDriveFolderPath})
 	}
 }
