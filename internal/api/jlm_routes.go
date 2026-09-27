@@ -215,6 +215,10 @@ func buildProspectsCSV(ctx context.Context, db *sql.DB, runID string) ([]byte, e
 	defer rows.Close()
 
 	var buf bytes.Buffer
+	// UTF-8 BOM: without it, Excel on Windows opens this as Windows-1252 and
+	// mangles anything non-ASCII (em-dashes, curly quotes, accented names)
+	// into mojibake like "a-euro-quote" instead of the real character.
+	buf.Write([]byte{0xEF, 0xBB, 0xBF})
 	cw := csv.NewWriter(&buf)
 	_ = cw.Write(jlmCSVHeader)
 	for rows.Next() {
