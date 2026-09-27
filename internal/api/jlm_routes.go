@@ -1,13 +1,16 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/smtp"
 	"net/url"
@@ -127,7 +130,17 @@ func jlmSaveProspectHandler(db *sql.DB) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "saved", "organization_name": req.OrganizationName})
+		draftStatus := ""
+		if strings.TrimSpace(req.ContactEmail) != "" && strings.TrimSpace(req.DraftOutreachSubject) != "" && strings.TrimSpace(req.DraftOutreachBody) != "" {
+			if err := appendZohoDraft(r.Context(), cfg, req.ContactEmail, req.DraftOutreachSubject, req.DraftOutreachBody); err != nil {
+				draftStatus = "failed: " + err.Error()
+			} else {
+				draftStatus = "created"
+			}
+			_, _ = db.ExecContext(r.Context(), `UPDATE jlm_prospects SET zoho_draft_status = ? WHERE organization_name = ?`, draftStatus, req.OrganizationName)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"status": "saved", "organization_name": req.OrganizationName, "zoho_draft_status": draftStatus})
 	}
 }
 
@@ -193,7 +206,7 @@ func jlmListOrgNamesHandler(db *sql.DB) http.HandlerFunc {
 var jlmCSVHeader = []string{"Organization", "EIN", "Location", "Mission", "Annual Revenue",
 	"Latest 990 Year", "Latest 990 Summary", "Website", "Executive Director", "Contact Email",
 	"Contact Phone", "Accounting Indicators", "Why Prospect", "Draft Subject", "Draft Body",
-	"Status", "Created At"}
+	"Zoho Draft Status", "Status", "Created At"}
 
 // buildProspectsCSV renders the given run (or, with an empty runID, every
 // prospect) as CSV bytes. Shared by the export endpoint and the OneDrive
@@ -201,7 +214,7 @@ var jlmCSVHeader = []string{"Organization", "EIN", "Location", "Mission", "Annua
 func buildProspectsCSV(ctx context.Context, db *sql.DB, runID string) ([]byte, error) {
 	cols := `organization_name, ein, location, mission, annual_revenue, latest_990_year,
 		latest_990_summary, website, executive_director, contact_email, contact_phone,
-		accounting_indicators, why_prospect, draft_outreach_subject, draft_outreach_body, status, created_at`
+		accounting_indicators, why_prospect, draft_outreach_subject, draft_outreach_body, zoho_draft_status, status, created_at`
 	var rows *sql.Rows
 	var err error
 	if runID != "" {
@@ -222,15 +235,15 @@ func buildProspectsCSV(ctx context.Context, db *sql.DB, runID string) ([]byte, e
 	cw := csv.NewWriter(&buf)
 	_ = cw.Write(jlmCSVHeader)
 	for rows.Next() {
-		var vals [17]sql.NullString
-		ptrs := make([]any, 17)
+		var vals [18]sql.NullString
+		ptrs := make([]any, 18)
 		for i := range vals {
 			ptrs[i] = &vals[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
 			continue
 		}
-		record := make([]string, 17)
+		record := make([]string, 18)
 		for i, v := range vals {
 			record[i] = v.String
 		}
@@ -257,6 +270,94 @@ func jlmExportProspectsHandler(db *sql.DB) http.HandlerFunc {
 		w.Header().Set("Content-Disposition", `attachment; filename="jlm-prospects.csv"`)
 		_, _ = w.Write(csvBytes)
 	}
+}
+
+// appendZohoDraft writes a draft message directly into the Drafts folder of
+// the Zoho mailbox via raw IMAP APPEND (RFC 3501). This creates a real draft
+// John can open, edit, and send from Zoho itself -- it never transmits
+// anything. Reuses the same app-specific password as the SMTP send path;
+// Zoho app passwords aren't protocol-scoped.
+func appendZohoDraft(ctx context.Context, cfg jlmConfig, to, subject, body string) error {
+	if cfg.ZohoUser == "" || cfg.ZohoPassword == "" || cfg.ZohoFrom == "" {
+		return fmt.Errorf("zoho not configured")
+	}
+
+	dialer := &net.Dialer{Timeout: 15 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", "imap.zoho.com:993", &tls.Config{ServerName: "imap.zoho.com"})
+	if err != nil {
+		return fmt.Errorf("imap connect failed: %w", err)
+	}
+	defer conn.Close()
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	} else {
+		_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
+	}
+
+	reader := bufio.NewReader(conn)
+	// Server greeting.
+	if _, err := reader.ReadString('\n'); err != nil {
+		return fmt.Errorf("imap greeting failed: %w", err)
+	}
+
+	readUntilTagged := func(tag string) (string, error) {
+		var lines strings.Builder
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return lines.String(), err
+			}
+			lines.WriteString(line)
+			if strings.HasPrefix(line, tag+" ") {
+				if !strings.Contains(line, "OK") {
+					return lines.String(), fmt.Errorf("imap command failed: %s", strings.TrimSpace(line))
+				}
+				return lines.String(), nil
+			}
+		}
+	}
+
+	// LOGIN
+	if _, err := fmt.Fprintf(conn, "a1 LOGIN %s %s\r\n", imapQuote(cfg.ZohoUser), imapQuote(cfg.ZohoPassword)); err != nil {
+		return fmt.Errorf("imap login write failed: %w", err)
+	}
+	if _, err := readUntilTagged("a1"); err != nil {
+		return fmt.Errorf("imap login failed: %w", err)
+	}
+
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
+		cfg.ZohoFrom, to, subject, body)
+
+	// APPEND -- announce the literal length, wait for the "+" continuation,
+	// then send the raw message bytes.
+	if _, err := fmt.Fprintf(conn, "a2 APPEND \"Drafts\" (\\Draft) {%d}\r\n", len(msg)); err != nil {
+		return fmt.Errorf("imap append header write failed: %w", err)
+	}
+	cont, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("imap append continuation read failed: %w", err)
+	}
+	if !strings.HasPrefix(cont, "+") {
+		return fmt.Errorf("imap server rejected append literal: %s", strings.TrimSpace(cont))
+	}
+	if _, err := conn.Write([]byte(msg + "\r\n")); err != nil {
+		return fmt.Errorf("imap append body write failed: %w", err)
+	}
+	if _, err := readUntilTagged("a2"); err != nil {
+		return fmt.Errorf("imap append failed: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(conn, "a3 LOGOUT\r\n")
+	return nil
+}
+
+// imapQuote wraps a value in IMAP quoted-string syntax. Zoho credentials
+// don't contain quotes or backslashes in practice, but escape defensively
+// rather than assume that.
+func imapQuote(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
 }
 
 // jlmOutreachEmailHandler handles POST /internal/jlm-outreach-email.
