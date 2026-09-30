@@ -203,6 +203,13 @@ func registerAPIRoutes(
 	r.Post("/internal/grants/push-to-onedrive", grantPushToOneDriveHandler(db))
 	r.Post("/internal/grants/loi-draft", grantCreateLOIDraftHandler(db))
 
+	// On-demand agent-run trigger for Hermes -- restricted to an explicit
+	// allowlist (see triggerableAgents), never the raw agent_id, so it can
+	// never reach anything touching client PII. Protected by
+	// AGENT_TRIGGER_TOKEN, not the main API auth.
+	r.Post("/internal/agent-runs/trigger", agentTriggerRunHandler())
+	r.Get("/internal/agent-runs/{id}/status", agentTriggerStatusHandler(db))
+
 	// MCP server management
 	registerMCPRoutes(r, db)
 }

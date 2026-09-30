@@ -150,7 +150,8 @@ func isPublicPath(path string) bool {
 		path == "/internal/grants/list-names" ||
 		path == "/internal/grants/export" ||
 		path == "/internal/grants/push-to-onedrive" ||
-		path == "/internal/grants/loi-draft"
+		path == "/internal/grants/loi-draft" ||
+		strings.HasPrefix(path, "/internal/agent-runs/")
 }
 
 func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {
