@@ -468,11 +468,55 @@ func refreshOneDriveToken(ctx context.Context, refreshToken string) (accessToken
 	return out.AccessToken, out.RefreshToken, nil
 }
 
+// getOneDriveAccessToken returns a fresh OneDrive access token for the
+// connected personal account, transparently handling the refresh-token
+// rotation personal Microsoft accounts require on every redemption. Shared
+// by every pipeline that pushes files to OneDrive (JLM, grants, ...).
+func getOneDriveAccessToken(ctx context.Context, db *sql.DB) (string, error) {
+	secretKey := os.Getenv("COLOSSEUM_SECRET_KEY")
+	encRefreshToken, err := getSystemSettingValue(ctx, db, "jlm_onedrive_refresh_token")
+	if err != nil || encRefreshToken == "" {
+		return "", fmt.Errorf("onedrive not connected (no refresh token stored)")
+	}
+	refreshToken, err := decryptSecret(encRefreshToken, secretKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt stored refresh token: %w", err)
+	}
+	accessToken, newRefreshToken, err := refreshOneDriveToken(ctx, refreshToken)
+	if err != nil {
+		return "", fmt.Errorf("onedrive token refresh failed: %w", err)
+	}
+	// Persist the rotated refresh token immediately -- if this fails we'd
+	// rather error loudly now than silently lose access on the next run.
+	if err := encryptAndStoreSecret(ctx, db, "jlm_onedrive_refresh_token", newRefreshToken, secretKey); err != nil {
+		return "", fmt.Errorf("failed to store refreshed token: %w", err)
+	}
+	return accessToken, nil
+}
+
+func decryptSecret(cipherText, keyMaterial string) (string, error) {
+	return secrets.Decrypt(cipherText, keyMaterial)
+}
+
+func encryptAndStoreSecret(ctx context.Context, db *sql.DB, key, value, keyMaterial string) error {
+	enc, err := secrets.Encrypt(value, keyMaterial)
+	if err != nil {
+		return err
+	}
+	return setSystemSettingValue(ctx, db, key, enc)
+}
+
 // uploadCSVToOneDrive writes data to <jlmOneDriveFolderPath>/filename in the
 // signed-in personal OneDrive account, overwriting any existing file of the
 // same name.
 func uploadCSVToOneDrive(ctx context.Context, accessToken, filename string, data []byte) error {
-	target := fmt.Sprintf("%s/%s", jlmOneDriveFolderPath, filename)
+	return uploadCSVToFolder(ctx, accessToken, jlmOneDriveFolderPath, filename, data)
+}
+
+// uploadCSVToFolder writes data to <folderPath>/filename in the signed-in
+// personal OneDrive account, overwriting any existing file of the same name.
+func uploadCSVToFolder(ctx context.Context, accessToken, folderPath, filename string, data []byte) error {
+	target := fmt.Sprintf("%s/%s", folderPath, filename)
 	// Path segments (incl. spaces) must be percent-encoded individually --
 	// naive url.PathEscape would also escape the "/" separators.
 	segments := strings.Split(target, "/")
@@ -516,32 +560,9 @@ func jlmPushToOneDriveHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		secretKey := os.Getenv("COLOSSEUM_SECRET_KEY")
-		encRefreshToken, err := getSystemSettingValue(r.Context(), db, "jlm_onedrive_refresh_token")
-		if err != nil || encRefreshToken == "" {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "onedrive not connected (no refresh token stored)"})
-			return
-		}
-		refreshToken, err := secrets.Decrypt(encRefreshToken, secretKey)
+		accessToken, err := getOneDriveAccessToken(r.Context(), db)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to decrypt stored refresh token: " + err.Error()})
-			return
-		}
-
-		accessToken, newRefreshToken, err := refreshOneDriveToken(r.Context(), refreshToken)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "onedrive token refresh failed: " + err.Error()})
-			return
-		}
-		// Persist the rotated refresh token immediately -- if this fails we'd
-		// rather error loudly now than silently lose access on the next run.
-		encNew, err := secrets.Encrypt(newRefreshToken, secretKey)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to encrypt refreshed token: " + err.Error()})
-			return
-		}
-		if err := setSystemSettingValue(r.Context(), db, "jlm_onedrive_refresh_token", encNew); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to store refreshed token: " + err.Error()})
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
 

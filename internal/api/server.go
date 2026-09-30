@@ -144,7 +144,13 @@ func isPublicPath(path string) bool {
 		path == "/internal/jlm-prospects/list-names" ||
 		path == "/internal/jlm-prospects/export" ||
 		path == "/internal/jlm-prospects/push-to-onedrive" ||
-		path == "/internal/jlm-outreach-email"
+		path == "/internal/jlm-outreach-email" ||
+		path == "/internal/grants" ||
+		path == "/internal/grants/search" ||
+		path == "/internal/grants/list-names" ||
+		path == "/internal/grants/export" ||
+		path == "/internal/grants/push-to-onedrive" ||
+		path == "/internal/grants/loi-draft"
 }
 
 func basicAuthMiddleware(user, pass string) func(http.Handler) http.Handler {

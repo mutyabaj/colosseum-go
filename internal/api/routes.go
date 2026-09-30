@@ -192,6 +192,17 @@ func registerAPIRoutes(
 	r.Post("/internal/jlm-prospects/push-to-onedrive", jlmPushToOneDriveHandler(db))
 	r.Post("/internal/jlm-outreach-email", jlmOutreachEmailHandler())
 
+	// EquiVoice grant pipeline -- dataset save/dedup/export by category,
+	// OneDrive push, and a Graph-based LOI draft creator (never sends --
+	// creates a real draft in the mnequivoicepartnership.org mailbox for
+	// John to review). Protected by GRANTS_INTERNAL_TOKEN, not the main API auth.
+	r.Post("/internal/grants", grantSaveHandler(db))
+	r.Post("/internal/grants/search", grantCheckExistsHandler(db))
+	r.Post("/internal/grants/list-names", grantListNamesHandler(db))
+	r.Get("/internal/grants/export", grantExportHandler(db))
+	r.Post("/internal/grants/push-to-onedrive", grantPushToOneDriveHandler(db))
+	r.Post("/internal/grants/loi-draft", grantCreateLOIDraftHandler(db))
+
 	// MCP server management
 	registerMCPRoutes(r, db)
 }
