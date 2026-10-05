@@ -210,6 +210,14 @@ func registerAPIRoutes(
 	r.Post("/internal/agent-runs/trigger", agentTriggerRunHandler())
 	r.Get("/internal/agent-runs/{id}/status", agentTriggerStatusHandler(db))
 
+	// Trading dashboard -- the daily congress-trade copy strategy cron (on
+	// the Kali VM) pushes a freshly rendered static HTML snapshot here after
+	// each run. Both routes sit behind the normal Basic Auth middleware
+	// (not in isPublicPath), same credentials as everything else -- no new
+	// token needed since this is first-party (John's own cron, not Hermes).
+	r.Put("/internal/trading-dashboard", tradingDashboardPushHandler())
+	r.Get("/trading-dashboard", tradingDashboardViewHandler())
+
 	// MCP server management
 	registerMCPRoutes(r, db)
 }
