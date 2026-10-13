@@ -218,6 +218,11 @@ func registerAPIRoutes(
 	r.Put("/internal/trading-dashboard", tradingDashboardPushHandler())
 	r.Get("/trading-dashboard", tradingDashboardViewHandler())
 
+	// Same pattern, for the AI provider usage telemetry dashboard pushed
+	// from the Kali VM (hermes/scripts/usage_telemetry/).
+	r.Put("/internal/usage-dashboard", usageDashboardPushHandler())
+	r.Get("/usage-dashboard", usageDashboardViewHandler())
+
 	// MCP server management
 	registerMCPRoutes(r, db)
 }
